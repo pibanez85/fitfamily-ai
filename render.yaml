@@ -5,8 +5,8 @@ services:
     plan: free
     region: oregon
     healthCheckPath: /health
-    buildCommand: corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @fitfamily-ai/api build
-    startCommand: pnpm --filter @fitfamily-ai/api start
+    buildCommand: npx pnpm@11.3.0 install --frozen-lockfile && npx pnpm@11.3.0 --filter @fitfamily-ai/api build
+    startCommand: npx pnpm@11.3.0 --filter @fitfamily-ai/api start
     autoDeploy: true
     envVars:
       - key: NODE_ENV

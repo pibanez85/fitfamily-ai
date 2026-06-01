@@ -81,11 +81,9 @@ Importante:
 Render ejecutara:
 
 ```bash
-corepack enable
-corepack prepare pnpm@11.3.0 --activate
-pnpm install --frozen-lockfile
-pnpm --filter @fitfamily-ai/api build
-pnpm --filter @fitfamily-ai/api start
+npx pnpm@11.3.0 install --frozen-lockfile
+npx pnpm@11.3.0 --filter @fitfamily-ai/api build
+npx pnpm@11.3.0 --filter @fitfamily-ai/api start
 ```
 
 Cuando termine, Render entregara una URL parecida a:
