@@ -68,11 +68,7 @@ SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key_secreta
 OPENAI_API_KEY=tu_openai_api_key
 ```
 
-Opcional:
-
-```txt
-USDA_API_KEY=
-```
+No agregues `USDA_API_KEY` por ahora. Es opcional y solo la usaremos despues si integramos USDA FoodData Central.
 
 Importante:
 
