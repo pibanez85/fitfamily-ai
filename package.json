@@ -1,0 +1,31 @@
+{
+  "name": "fitfamily-ai",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.3.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm --filter @fitfamily-ai/shared build && pnpm --parallel --filter @fitfamily-ai/api --filter @fitfamily-ai/mobile dev",
+    "dev:api": "pnpm --filter @fitfamily-ai/shared build && pnpm --filter @fitfamily-ai/api dev",
+    "dev:mobile": "pnpm --filter @fitfamily-ai/mobile dev",
+    "build:api": "pnpm --filter @fitfamily-ai/api build",
+    "start:api": "pnpm --filter @fitfamily-ai/api start",
+    "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "eslint .",
+    "test": "pnpm -r --if-present test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "eslint": "^9.39.1",
+    "prettier": "^3.7.4",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.48.0",
+    "vitest": "^4.0.15"
+  }
+}

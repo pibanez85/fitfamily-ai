@@ -1,0 +1,15 @@
+export {
+  calculateFoodMacros,
+  describeServing,
+  foodCatalog,
+  gramsFor,
+  normalizeFoodText,
+  searchFoods,
+  sumSelectedFoods,
+  unitsFor,
+  type FoodCatalogItem,
+  type FoodSource,
+  type FoodUnit,
+  type MacroTotals,
+  type SelectedFoodItem,
+} from "@fitfamily-ai/shared";

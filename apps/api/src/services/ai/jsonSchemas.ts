@@ -1,0 +1,96 @@
+export const foodAnalysisJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["estimatedMealName", "items", "totals", "confidence", "disclaimer"],
+  properties: {
+    estimatedMealName: { type: "string" },
+    items: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "name",
+          "estimatedPortion",
+          "calories",
+          "proteinG",
+          "carbsG",
+          "fatG",
+          "fiberG",
+          "confidence",
+        ],
+        properties: {
+          name: { type: "string" },
+          estimatedPortion: { type: "string" },
+          calories: { type: "number", minimum: 0 },
+          proteinG: { type: "number", minimum: 0 },
+          carbsG: { type: "number", minimum: 0 },
+          fatG: { type: "number", minimum: 0 },
+          fiberG: { type: "number", minimum: 0 },
+          confidence: { type: "number", minimum: 0, maximum: 1 },
+        },
+      },
+    },
+    totals: {
+      type: "object",
+      additionalProperties: false,
+      required: ["calories", "proteinG", "carbsG", "fatG", "fiberG"],
+      properties: {
+        calories: { type: "number", minimum: 0 },
+        proteinG: { type: "number", minimum: 0 },
+        carbsG: { type: "number", minimum: 0 },
+        fatG: { type: "number", minimum: 0 },
+        fiberG: { type: "number", minimum: 0 },
+      },
+    },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+    disclaimer: { type: "string" },
+  },
+} as const;
+
+export const gymMachineAnalysisJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "machineName",
+    "possibleExercises",
+    "primaryMuscles",
+    "secondaryMuscles",
+    "instructions",
+    "commonMistakes",
+    "safetyRecommendations",
+    "avoidIf",
+    "difficulty",
+    "confidence",
+    "disclaimer",
+  ],
+  properties: {
+    machineName: { type: "string" },
+    possibleExercises: {
+      type: "array",
+      minItems: 1,
+      items: { type: "string" },
+    },
+    primaryMuscles: { type: "array", items: { type: "string" } },
+    secondaryMuscles: { type: "array", items: { type: "string" } },
+    instructions: {
+      type: "array",
+      minItems: 1,
+      items: { type: "string" },
+    },
+    commonMistakes: { type: "array", items: { type: "string" } },
+    safetyRecommendations: {
+      type: "array",
+      minItems: 1,
+      items: { type: "string" },
+    },
+    avoidIf: { type: "array", items: { type: "string" } },
+    difficulty: {
+      type: "string",
+      enum: ["beginner", "intermediate", "advanced", "unknown"],
+    },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+    disclaimer: { type: "string" },
+  },
+} as const;

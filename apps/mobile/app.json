@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "FitFamily AI",
+    "slug": "fitfamily-ai",
+    "scheme": "fitfamilyai",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "backgroundColor": "#f8fafc",
+    "splash": {
+      "backgroundColor": "#0f766e",
+      "resizeMode": "contain"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.fitfamilyai.mobile",
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "FitFamily AI necesita acceder a tus datos de salud para mostrarte pasos, frecuencia cardíaca, entrenamientos detectados y sueño desde tu reloj inteligente.",
+        "NSHealthUpdateUsageDescription": "FitFamily AI puede registrar entrenamientos en Apple Health para mantener tus datos sincronizados."
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.background-delivery": true
+      }
+    },
+    "android": {
+      "package": "com.fitfamilyai.mobile",
+      "versionCode": 1,
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_DISTANCE",
+        "android.permission.health.READ_HEART_RATE",
+        "android.permission.health.READ_RESTING_HEART_RATE",
+        "android.permission.health.READ_EXERCISE",
+        "android.permission.health.READ_SLEEP",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.READ_TOTAL_CALORIES_BURNED",
+        "android.permission.ACTIVITY_RECOGNITION"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-image-picker",
+      "expo-notifications"
+    ],
+    "_pluginsForNativeBuild": [
+      ["react-native-health", { "isClinicalDataEnabled": false }]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

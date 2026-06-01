@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: fitfamily-ai-api
+    runtime: node
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    buildCommand: corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @fitfamily-ai/api build
+    startCommand: pnpm --filter @fitfamily-ai/api start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: AI_PROVIDER
+        value: openai
+      - key: AI_MODEL_TEXT
+        value: gpt-5.4-mini
+      - key: AI_MODEL_VISION
+        value: gpt-5.4-mini
+      - key: AI_ARENA_ENABLED
+        value: "false"
+      - key: OPEN_FOOD_FACTS_BASE_URL
+        value: https://world.openfoodfacts.org
+      - key: OPEN_FOOD_FACTS_USER_AGENT
+        value: FitFamilyAI/0.1 (production; contact: owner)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: USDA_API_KEY
+        sync: false
