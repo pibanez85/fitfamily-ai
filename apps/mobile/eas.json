@@ -7,17 +7,32 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "environment": "development"
+      "environment": "development",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://fitfamily-ai-api.onrender.com",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://zjosjypxdyourotlidqf.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_EQmdtoUVTZego_sctY9HYg_bLXxMu4v"
+      }
     },
     "preview": {
       "distribution": "internal",
       "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://fitfamily-ai-api.onrender.com",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://zjosjypxdyourotlidqf.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_EQmdtoUVTZego_sctY9HYg_bLXxMu4v"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
       "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://fitfamily-ai-api.onrender.com",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://zjosjypxdyourotlidqf.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_EQmdtoUVTZego_sctY9HYg_bLXxMu4v"
+      },
       "android": {
         "buildType": "app-bundle"
       }
