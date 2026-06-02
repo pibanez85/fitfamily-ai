@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link, router } from "expo-router";
+import { Link, router, type Href } from "expo-router";
 import { LogIn, Sparkles } from "lucide-react-native";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -25,6 +25,7 @@ const LoginSchema = z.object({
 });
 
 type LoginForm = z.infer<typeof LoginSchema>;
+const forgotPasswordHref = "/forgot-password" as Href;
 
 export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +126,9 @@ export default function LoginScreen() {
           keyboardType="email-address"
         />
         <FormField control={control} name="password" label="Clave" secureTextEntry />
+        <Link href={forgotPasswordHref} style={styles.forgotLink}>
+          Olvide mi clave
+        </Link>
         {status ? <Text style={styles.status}>{status}</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <AppButton label="Iniciar sesion" icon={LogIn} loading={loading} onPress={handleSubmit(onSubmit)} />
@@ -168,5 +172,10 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: "800",
     textAlign: "center",
+  },
+  forgotLink: {
+    color: colors.primary,
+    fontWeight: "800",
+    textAlign: "right",
   },
 });

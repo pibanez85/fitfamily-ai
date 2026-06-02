@@ -105,6 +105,22 @@ function createDemoClient(): SupabaseClient {
       emit("SIGNED_IN");
       return { data: { session, user: session.user }, error: null };
     },
+    async resetPasswordForEmail() {
+      return { data: {}, error: null };
+    },
+    async exchangeCodeForSession() {
+      session = buildDemoSession("demo@fitfamily.ai");
+      emit("SIGNED_IN");
+      return { data: { session, user: session.user }, error: null };
+    },
+    async setSession() {
+      session = buildDemoSession("demo@fitfamily.ai");
+      emit("SIGNED_IN");
+      return { data: { session, user: session.user }, error: null };
+    },
+    async updateUser() {
+      return { data: { user: session?.user ?? buildDemoSession("demo@fitfamily.ai").user }, error: null };
+    },
     async signOut() {
       session = null;
       emit("SIGNED_OUT");

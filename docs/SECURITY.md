@@ -55,6 +55,24 @@ apps/api/src/middleware/auth.ts
 apps/api/src/services/supabase.ts
 ```
 
+## Recuperacion de clave
+
+Mobile usa Supabase Auth para recuperar clave. La app no genera ni guarda claves.
+
+URL de redireccion para Android/iOS:
+
+```txt
+fitfamilyai://reset-password
+```
+
+En Supabase debe agregarse en:
+
+```txt
+Authentication > URL Configuration > Redirect URLs
+```
+
+Si no se agrega, el correo puede llegar correctamente, pero el enlace no abrira la pantalla `reset-password` de la app.
+
 ## Ownership
 
 Archivo:
