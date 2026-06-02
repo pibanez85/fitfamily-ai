@@ -63,6 +63,7 @@ URL de redireccion para Android/iOS:
 
 ```txt
 fitfamilyai://reset-password
+fitfamilyai:///reset-password
 ```
 
 En Supabase debe agregarse en:
