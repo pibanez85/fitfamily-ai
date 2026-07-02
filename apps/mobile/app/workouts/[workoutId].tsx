@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { Play } from "lucide-react-native";
+import { Pencil, Play } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import { AppButton } from "@/components/AppButton";
@@ -43,6 +43,12 @@ export default function WorkoutDetailScreen() {
     <Screen>
       <Title>{workout.name}</Title>
       <Subtitle>{workout.description ?? "Detalle de rutina"}</Subtitle>
+      <AppButton
+        label="Editar rutina"
+        icon={Pencil}
+        variant="secondary"
+        onPress={() => router.push({ pathname: "/workouts/create", params: { workoutId: workout.id } })}
+      />
       {workout.workoutDays
         ?.slice()
         .sort((a, b) => a.dayIndex - b.dayIndex)

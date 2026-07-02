@@ -48,10 +48,12 @@ type DemoWorkoutDetail = Workout & {
     workoutDayExercises: Array<{
       id: string;
       exerciseId?: string;
+      orderIndex?: number;
       targetSets: number | null;
       targetReps: string | null;
       restSeconds?: number | null;
       targetWeight?: number | null;
+      notes?: string | null;
       exercises: { id?: string; name: string } | null;
     }>;
   }>;
@@ -76,12 +78,39 @@ function createDemoDayExercise(name: string, targetSets: number, targetReps: str
   return {
     id: uid(),
     exerciseId: exercise.id,
+    orderIndex: 0,
     targetSets,
     targetReps,
     restSeconds,
     targetWeight: null,
+    notes: null,
     exercises: { id: exercise.id, name: exercise.name },
   };
+}
+
+function buildDemoWorkoutDays(input: { days?: CreateWorkoutInput["days"] }) {
+  return (input.days ?? []).map((day) => ({
+    id: uid(),
+    name: day.name,
+    dayIndex: day.dayIndex,
+    workoutDayExercises: (day.exercises ?? []).map((entry, index) => {
+      const exercise = exercises.find((item) => item.id === entry.exerciseId);
+      return {
+        id: uid(),
+        exerciseId: entry.exerciseId,
+        orderIndex: entry.orderIndex ?? index,
+        targetSets: entry.targetSets ?? null,
+        targetReps: entry.targetReps ?? null,
+        restSeconds: entry.restSeconds ?? null,
+        targetWeight: entry.targetWeight ?? null,
+        notes: entry.notes ?? null,
+        exercises: {
+          id: entry.exerciseId,
+          name: exercise?.name ?? "Ejercicio",
+        },
+      };
+    }),
+  }));
 }
 
 const PROFILE_PATO = uid();
@@ -502,23 +531,7 @@ export const demoApi = {
         goal: input.goal ?? null,
         createdAt: now(),
         updatedAt: now(),
-        workoutDays: (input.days ?? []).map((day) => ({
-          id: uid(),
-          name: day.name,
-          dayIndex: day.dayIndex,
-          workoutDayExercises: (day.exercises ?? []).map((entry) => ({
-            id: uid(),
-            exerciseId: entry.exerciseId,
-            targetSets: entry.targetSets ?? null,
-            targetReps: entry.targetReps ?? null,
-            restSeconds: entry.restSeconds ?? null,
-            targetWeight: entry.targetWeight ?? null,
-            exercises: {
-              id: entry.exerciseId,
-              name: exercises.find((e) => e.id === entry.exerciseId)?.name ?? "Ejercicio",
-            },
-          })),
-        })),
+        workoutDays: buildDemoWorkoutDays(input),
       };
       (workouts[profileId] ??= []).push(workout);
       return workout as Workout;
@@ -540,6 +553,7 @@ export const demoApi = {
             name: input.name ?? current.name,
             description: input.description ?? current.description,
             goal: input.goal ?? current.goal,
+            workoutDays: input.days ? buildDemoWorkoutDays({ days: input.days }) : current.workoutDays,
             updatedAt: now(),
           };
           list[index] = updated;

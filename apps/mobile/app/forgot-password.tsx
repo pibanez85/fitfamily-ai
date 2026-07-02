@@ -1,10 +1,9 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as Linking from "expo-linking";
 import { Link } from "expo-router";
 import { Mail, Send } from "lucide-react-native";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { AppButton } from "@/components/AppButton";
 import { Card } from "@/components/Card";
@@ -23,7 +22,11 @@ const ForgotPasswordSchema = z.object({
 type ForgotPasswordForm = z.infer<typeof ForgotPasswordSchema>;
 
 function getResetRedirectUrl() {
-  return Linking.createURL("/reset-password");
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    return `${window.location.origin}/reset-password`;
+  }
+
+  return "fitfamilyai://reset-password";
 }
 
 export default function ForgotPasswordScreen() {

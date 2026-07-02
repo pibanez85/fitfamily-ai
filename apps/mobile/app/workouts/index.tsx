@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from "expo-router";
-import { Activity, Check, Clock, Dumbbell, Plus, Sparkles, Star, Trash2 } from "lucide-react-native";
+import { Activity, Check, Clock, Dumbbell, Pencil, Plus, Sparkles, Star, Trash2 } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import type { Workout } from "@fitfamily-ai/shared";
@@ -165,6 +165,17 @@ export default function WorkoutsScreen() {
                     <Text style={styles.actionPillText}>Desactivar</Text>
                   </Pressable>
                 )}
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    router.push({ pathname: "/workouts/create", params: { workoutId: workout.id } });
+                  }}
+                  style={styles.actionPill}
+                >
+                  <Pencil size={14} color={colors.primary} />
+                  <Text style={styles.actionPillText}>Editar</Text>
+                </Pressable>
                 <Pressable
                   accessibilityRole="button"
                   disabled={deletingId === workout.id}

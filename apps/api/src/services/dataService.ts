@@ -119,4 +119,9 @@ export class DataService {
     const { error } = await this.client.from(table).delete().eq("id", id);
     if (error) throw new AppError(500, "DB_DELETE_FAILED", error.message);
   }
+
+  async removeBy(table: string, column: string, value: string): Promise<void> {
+    const { error } = await this.client.from(table).delete().eq(column, value);
+    if (error) throw new AppError(500, "DB_DELETE_FAILED", error.message);
+  }
 }

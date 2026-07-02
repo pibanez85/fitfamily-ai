@@ -45,19 +45,7 @@ export function createWorkoutsRouter(data: DataService, ownership: OwnershipServ
           ...workoutInput,
           profileId,
         });
-
-        for (const day of days as Array<Row & { exercises: Row[] }>) {
-          const { exercises, ...dayInput } = day;
-          const workoutDay = await data.insert("workout_days", {
-            ...dayInput,
-            workoutId: workout.id,
-          });
-          const dayExercises = exercises.map((exercise: Row) => ({
-            ...exercise,
-            workoutDayId: workoutDay.id,
-          }));
-          await data.bulkInsert("workout_day_exercises", dayExercises as Row[]);
-        }
+        await replaceWorkoutDays(data, String(workout.id), days as Array<Row & { exercises: Row[] }>);
 
         const created = await data.getById("workouts", String(workout.id), workoutSelect);
         res.status(201).json({ data: created });
@@ -90,8 +78,20 @@ export function createWorkoutsRouter(data: DataService, ownership: OwnershipServ
       try {
         const workoutId = getParam(req, "workoutId");
         await ownership.assertResourceProfile("workouts", workoutId, requireUserId(req));
-        const { days: _days, ...workoutInput } = req.body;
-        const workout = await data.update("workouts", workoutId, workoutInput);
+        const { days, ...workoutInput } = req.body;
+        const hasWorkoutFields = Object.keys(workoutInput).length > 0;
+
+        if (hasWorkoutFields) {
+          await data.update("workouts", workoutId, workoutInput);
+        } else if (days !== undefined) {
+          await data.update("workouts", workoutId, { updatedAt: new Date().toISOString() });
+        }
+
+        if (days !== undefined) {
+          await replaceWorkoutDays(data, workoutId, days as Array<Row & { exercises: Row[] }>);
+        }
+
+        const workout = await data.getById("workouts", workoutId, workoutSelect);
         res.json({ data: workout });
       } catch (error) {
         next(error);
@@ -115,4 +115,25 @@ export function createWorkoutsRouter(data: DataService, ownership: OwnershipServ
   );
 
   return router;
+}
+
+async function replaceWorkoutDays(
+  data: DataService,
+  workoutId: string,
+  days: Array<Row & { exercises: Row[] }>,
+) {
+  await data.removeBy("workout_days", "workout_id", workoutId);
+
+  for (const day of days) {
+    const { exercises, ...dayInput } = day;
+    const workoutDay = await data.insert("workout_days", {
+      ...dayInput,
+      workoutId,
+    });
+    const dayExercises = exercises.map((exercise: Row) => ({
+      ...exercise,
+      workoutDayId: workoutDay.id,
+    }));
+    await data.bulkInsert("workout_day_exercises", dayExercises as Row[]);
+  }
 }
