@@ -40,6 +40,30 @@ const now = () => new Date().toISOString();
 const daysAgo = (days: number) =>
   new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
+// Fecha de hace `days` dias a una hora local concreta, para que las comidas y
+// entrenos del historial demo caigan en horarios creibles.
+const dayAt = (days: number, hour: number, minute = 0) => {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  date.setHours(hour, minute, 0, 0);
+  return date.toISOString();
+};
+
+// PRNG determinista: el historial demo se ve identico en cada arranque.
+function mulberry32(seed: number) {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function roundToStep(value: number, step = 2.5) {
+  return Math.round(value / step) * step;
+}
+
 type DemoWorkoutDetail = Workout & {
   workoutDays: Array<{
     id: string;
@@ -57,6 +81,25 @@ type DemoWorkoutDetail = Workout & {
       exercises: { id?: string; name: string } | null;
     }>;
   }>;
+};
+
+// Misma forma que devuelve la API real: log + sets con el ejercicio anidado.
+type DemoWorkoutLogSet = {
+  id: string;
+  exerciseId: string;
+  setIndex: number;
+  reps: number | null;
+  weight: number | null;
+  rpe: number | null;
+  restSeconds: number | null;
+  notes: string | null;
+  exercises: (typeof exercises)[number] | null;
+};
+
+type DemoWorkoutLog = WorkoutLog & {
+  workoutLogSets: DemoWorkoutLogSet[];
+  workouts: { name: string | null } | null;
+  workoutDays: { name: string | null } | null;
 };
 
 const exercises = EXERCISE_LIBRARY.map((exercise) =>
@@ -195,145 +238,234 @@ const workouts: Record<string, DemoWorkoutDetail[]> = {
   [PROFILE_YAYI]: [makeWorkout(PROFILE_YAYI, "Full body tono", "Tonificar")],
 };
 
-const workoutLogs: Record<string, WorkoutLog[]> = {
-  [PROFILE_PATO]: [
-    {
-      id: uid(),
-      profileId: PROFILE_PATO,
-      workoutId: null,
-      workoutDayId: null,
-      startedAt: daysAgo(1),
-      endedAt: daysAgo(1),
-      perceivedEffort: 8,
-      notes: "Buen dia de empuje, subí 2.5kg en press.",
-      createdAt: daysAgo(1),
-    },
-    {
-      id: uid(),
-      profileId: PROFILE_PATO,
-      workoutId: null,
-      workoutDayId: null,
-      startedAt: daysAgo(3),
-      endedAt: daysAgo(3),
-      perceivedEffort: 7,
-      notes: "Pierna pesada.",
-      createdAt: daysAgo(3),
-    },
-  ],
-  [PROFILE_YAYI]: [
-    {
-      id: uid(),
-      profileId: PROFILE_YAYI,
-      workoutId: null,
-      workoutDayId: null,
-      startedAt: daysAgo(2),
-      endedAt: daysAgo(2),
-      perceivedEffort: 6,
-      notes: "Circuito completo.",
-      createdAt: daysAgo(2),
-    },
-  ],
+// Pesos base (kg) por ejercicio para el historial demo. 0 = peso corporal.
+const BASE_WEIGHTS: Record<string, number> = {
+  "Press de banca": 55,
+  "Press militar con barra": 32.5,
+  "Curl con barra": 25,
+  Sentadilla: 70,
+  "Zancadas caminando": 16,
+  "Peso muerto rumano": 60,
+  "Remo con barra": 50,
+  "Dominadas asistidas": 0,
 };
+
+function repsFromTarget(target: string | null, rand: () => number): number {
+  if (!target) return 10;
+  if (target === "max") return 6 + Math.floor(rand() * 4);
+  const [lo, hi] = target.split("-").map((value) => parseInt(value, 10));
+  if (!Number.isFinite(lo)) return 10;
+  if (!Number.isFinite(hi)) return lo!;
+  return lo! + Math.floor(rand() * (hi! - lo! + 1));
+}
+
+// Genera sesiones historicas con series reales y progresion de carga suave,
+// ciclando los dias de la rutina (A, B, C, A, ...).
+function seedWorkoutLogs(
+  profileId: string,
+  workout: DemoWorkoutDetail,
+  sessionDays: number[],
+  weightScale: number,
+  seed: number,
+): DemoWorkoutLog[] {
+  const rand = mulberry32(seed);
+  const oldestDay = sessionDays[0] ?? 0;
+
+  return sessionDays.map((day, index) => {
+    const dayTemplate = workout.workoutDays[index % workout.workoutDays.length]!;
+    const weeksFromStart = (oldestDay - day) / 7;
+    const startedAt = dayAt(day, 18, 10 + Math.floor(rand() * 35));
+    const durationMin = 50 + Math.floor(rand() * 25);
+    const endedAt = new Date(new Date(startedAt).getTime() + durationMin * 60000).toISOString();
+
+    const workoutLogSets: DemoWorkoutLogSet[] = [];
+    for (const entry of dayTemplate.workoutDayExercises) {
+      const base = BASE_WEIGHTS[entry.exercises?.name ?? ""] ?? 20;
+      const weight = base > 0 ? roundToStep(base * weightScale + weeksFromStart * 1.25) : null;
+      const setCount = entry.targetSets ?? 3;
+      for (let setIndex = 1; setIndex <= setCount; setIndex++) {
+        workoutLogSets.push({
+          id: uid(),
+          exerciseId: entry.exerciseId!,
+          setIndex,
+          reps: repsFromTarget(entry.targetReps, rand),
+          weight,
+          rpe: 6 + Math.floor(rand() * 3),
+          restSeconds: entry.restSeconds ?? 90,
+          notes: null,
+          exercises: exercises.find((exercise) => exercise.id === entry.exerciseId) ?? null,
+        });
+      }
+    }
+
+    return {
+      id: uid(),
+      profileId,
+      workoutId: workout.id,
+      workoutDayId: dayTemplate.id,
+      startedAt,
+      endedAt,
+      perceivedEffort: 6 + Math.floor(rand() * 3),
+      notes: null,
+      createdAt: startedAt,
+      workoutLogSets,
+      workouts: { name: workout.name },
+      workoutDays: { name: dayTemplate.name },
+    };
+  });
+}
+
+// ~3 sesiones/semana durante el ultimo mes para cada perfil.
+const PATO_SESSION_DAYS = [29, 27, 25, 22, 20, 18, 15, 13, 11, 8, 6, 4, 1];
+const YAYI_SESSION_DAYS = [28, 26, 23, 21, 19, 16, 14, 12, 9, 7, 5, 2];
+
+const workoutLogs: Record<string, DemoWorkoutLog[]> = {
+  [PROFILE_PATO]: seedWorkoutLogs(PROFILE_PATO, workouts[PROFILE_PATO]![0]!, PATO_SESSION_DAYS, 1, 11),
+  [PROFILE_YAYI]: seedWorkoutLogs(PROFILE_YAYI, workouts[PROFILE_YAYI]![0]!, YAYI_SESSION_DAYS, 0.55, 23),
+};
+
+type MealTemplate = {
+  name: string;
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  fiberG: number;
+};
+
+const DEMO_BREAKFASTS: MealTemplate[] = [
+  { name: "Avena con huevos", calories: 520, proteinG: 34, carbsG: 58, fatG: 16, fiberG: 7 },
+  { name: "Pan marraqueta con palta y huevo", calories: 460, proteinG: 20, carbsG: 52, fatG: 19, fiberG: 6 },
+  { name: "Yogurt con fruta y granola", calories: 380, proteinG: 24, carbsG: 48, fatG: 9, fiberG: 5 },
+  { name: "Huevos revueltos con pan integral", calories: 430, proteinG: 27, carbsG: 38, fatG: 18, fiberG: 5 },
+];
+
+const DEMO_LUNCHES: MealTemplate[] = [
+  { name: "Pollo, arroz y ensalada", calories: 680, proteinG: 52, carbsG: 65, fatG: 18, fiberG: 6 },
+  { name: "Carne con pure y ensalada", calories: 720, proteinG: 48, carbsG: 60, fatG: 26, fiberG: 5 },
+  { name: "Cazuela de vacuno", calories: 560, proteinG: 38, carbsG: 48, fatG: 20, fiberG: 7 },
+  { name: "Salmon con arroz y verduras", calories: 640, proteinG: 44, carbsG: 55, fatG: 22, fiberG: 5 },
+];
+
+const DEMO_DINNERS: MealTemplate[] = [
+  { name: "Tortilla de verduras con atun", calories: 430, proteinG: 34, carbsG: 24, fatG: 20, fiberG: 5 },
+  { name: "Pechuga con fideos", calories: 520, proteinG: 42, carbsG: 52, fatG: 12, fiberG: 4 },
+  { name: "Ensalada completa con huevo y quinoa", calories: 410, proteinG: 24, carbsG: 40, fatG: 16, fiberG: 8 },
+  { name: "Sopa de pollo con arroz", calories: 380, proteinG: 30, carbsG: 42, fatG: 8, fiberG: 3 },
+];
+
+const DEMO_SNACKS: MealTemplate[] = [
+  { name: "Batido de proteina con platano", calories: 260, proteinG: 28, carbsG: 30, fatG: 3, fiberG: 2 },
+  { name: "Frutos secos y fruta", calories: 220, proteinG: 6, carbsG: 24, fatG: 12, fiberG: 4 },
+  { name: "Yogurt proteico", calories: 150, proteinG: 18, carbsG: 12, fatG: 3, fiberG: 0 },
+];
+
+function buildDemoMeal(
+  profileId: string,
+  mealType: Meal["mealType"],
+  template: MealTemplate,
+  eatenAt: string,
+  scale: number,
+): Meal {
+  const factor = (value: number) => Math.round(value * scale);
+  return {
+    id: uid(),
+    profileId,
+    mealType,
+    eatenAt,
+    name: template.name,
+    calories: factor(template.calories),
+    proteinG: factor(template.proteinG),
+    carbsG: factor(template.carbsG),
+    fatG: factor(template.fatG),
+    fiberG: factor(template.fiberG),
+    notes: null,
+    createdAt: eatenAt,
+    updatedAt: eatenAt,
+  };
+}
+
+// Un mes de comidas con escenarios reales: dias completos, dias a medias y
+// alguno sin registro. Los dias de entreno suman un snack extra.
+function seedMeals(
+  profileId: string,
+  totalDays: number,
+  scale: number,
+  trainingDays: Set<number>,
+  seed: number,
+): Meal[] {
+  const rand = mulberry32(seed);
+  const pick = <T,>(list: T[]) => list[Math.floor(rand() * list.length)]!;
+  const result: Meal[] = [];
+
+  for (let day = totalDays; day >= 1; day--) {
+    const scenario = rand();
+    if (scenario < 0.06) continue; // dia sin registros
+
+    result.push(buildDemoMeal(profileId, "breakfast", pick(DEMO_BREAKFASTS), dayAt(day, 8, 30), scale));
+    result.push(buildDemoMeal(profileId, "lunch", pick(DEMO_LUNCHES), dayAt(day, 13, 30), scale));
+
+    // ~14% de los dias queda incompleto (sin cena registrada).
+    if (scenario >= 0.2) {
+      result.push(buildDemoMeal(profileId, "dinner", pick(DEMO_DINNERS), dayAt(day, 20, 30), scale));
+    }
+    if (trainingDays.has(day) || rand() < 0.25) {
+      result.push(buildDemoMeal(profileId, "snack", pick(DEMO_SNACKS), dayAt(day, 17, 0), scale));
+    }
+  }
+
+  return result;
+}
 
 const meals: Record<string, Meal[]> = {
   [PROFILE_PATO]: [
-    {
-      id: uid(),
-      profileId: PROFILE_PATO,
-      mealType: "breakfast",
-      eatenAt: daysAgo(0),
-      name: "Avena con huevos",
-      calories: 520,
-      proteinG: 34,
-      carbsG: 58,
-      fatG: 16,
-      fiberG: 7,
-      notes: null,
-      createdAt: daysAgo(0),
-      updatedAt: daysAgo(0),
-    },
-    {
-      id: uid(),
-      profileId: PROFILE_PATO,
-      mealType: "lunch",
-      eatenAt: daysAgo(0),
-      name: "Pollo, arroz y ensalada",
-      calories: 680,
-      proteinG: 52,
-      carbsG: 65,
-      fatG: 18,
-      fiberG: 6,
-      notes: null,
-      createdAt: daysAgo(0),
-      updatedAt: daysAgo(0),
-    },
+    buildDemoMeal(PROFILE_PATO, "breakfast", DEMO_BREAKFASTS[0]!, dayAt(0, 8, 30), 1),
+    buildDemoMeal(PROFILE_PATO, "lunch", DEMO_LUNCHES[0]!, dayAt(0, 13, 30), 1),
+    ...seedMeals(PROFILE_PATO, 29, 1, new Set(PATO_SESSION_DAYS), 31),
   ],
   [PROFILE_YAYI]: [
-    {
-      id: uid(),
-      profileId: PROFILE_YAYI,
-      mealType: "breakfast",
-      eatenAt: daysAgo(0),
-      name: "Yogurt con fruta y granola",
-      calories: 340,
-      proteinG: 22,
-      carbsG: 44,
-      fatG: 8,
-      fiberG: 5,
-      notes: null,
-      createdAt: daysAgo(0),
-      updatedAt: daysAgo(0),
-    },
+    buildDemoMeal(PROFILE_YAYI, "breakfast", DEMO_BREAKFASTS[2]!, dayAt(0, 9, 0), 0.8),
+    ...seedMeals(PROFILE_YAYI, 29, 0.75, new Set(YAYI_SESSION_DAYS), 47),
   ],
 };
 
-const bodyMetrics: Record<string, BodyMetric[]> = {
-  [PROFILE_PATO]: [
-    {
+// Pesajes semanales del ultimo mes con tendencia a la baja suave.
+function seedBodyMetrics(
+  profileId: string,
+  startWeight: number,
+  endWeight: number,
+  startFat: number,
+  endFat: number,
+  waistStart: number | null,
+): BodyMetric[] {
+  const measureDays = [29, 22, 15, 8, 1];
+  const steps = measureDays.length - 1;
+
+  return measureDays.map((day, index) => {
+    const t = index / steps;
+    const weight = Math.round((startWeight + (endWeight - startWeight) * t) * 10) / 10;
+    const fat = Math.round((startFat + (endFat - startFat) * t) * 10) / 10;
+    const measuredAt = dayAt(day, 7, 45);
+    return {
       id: uid(),
-      profileId: PROFILE_PATO,
-      measuredAt: daysAgo(1),
-      weightKg: 78.4,
-      bodyFatPercentage: 16,
-      waistCm: 82,
-      chestCm: 102,
-      hipCm: null,
-      armCm: 37,
-      thighCm: null,
-      notes: null,
-      createdAt: daysAgo(1),
-    },
-    {
-      id: uid(),
-      profileId: PROFILE_PATO,
-      measuredAt: daysAgo(14),
-      weightKg: 79.1,
-      bodyFatPercentage: 17,
-      waistCm: 84,
-      chestCm: 101,
-      hipCm: null,
-      armCm: 36.5,
-      thighCm: null,
-      notes: null,
-      createdAt: daysAgo(14),
-    },
-  ],
-  [PROFILE_YAYI]: [
-    {
-      id: uid(),
-      profileId: PROFILE_YAYI,
-      measuredAt: daysAgo(2),
-      weightKg: 61.2,
-      bodyFatPercentage: 24,
-      waistCm: 70,
+      profileId,
+      measuredAt,
+      weightKg: weight,
+      bodyFatPercentage: fat,
+      waistCm: waistStart == null ? null : Math.round((waistStart - t * 1.5) * 10) / 10,
       chestCm: null,
-      hipCm: 96,
+      hipCm: null,
       armCm: null,
-      thighCm: 55,
+      thighCm: null,
       notes: null,
-      createdAt: daysAgo(2),
-    },
-  ],
+      createdAt: measuredAt,
+    };
+  });
+}
+
+const bodyMetrics: Record<string, BodyMetric[]> = {
+  [PROFILE_PATO]: seedBodyMetrics(PROFILE_PATO, 79.9, 78.4, 17.2, 16.1, 84),
+  [PROFILE_YAYI]: seedBodyMetrics(PROFILE_YAYI, 62.1, 61.2, 24.6, 24, 70.5),
 };
 
 function listFor<T>(map: Record<string, T[]>, profileId: string): T[] {
@@ -341,50 +473,67 @@ function listFor<T>(map: Record<string, T[]>, profileId: string): T[] {
 }
 
 function buildDashboard(profileId: string): DashboardResponse {
-  const profileMeals = meals[profileId] ?? [];
-  const profileLogs = workoutLogs[profileId] ?? [];
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const profileMeals = (meals[profileId] ?? []).filter(
+    (meal) => new Date(meal.eatenAt).getTime() >= sevenDaysAgo,
+  );
+  const profileLogs = (workoutLogs[profileId] ?? []).filter(
+    (log) => new Date(log.startedAt).getTime() >= sevenDaysAgo,
+  );
   const profileMetrics = bodyMetrics[profileId] ?? [];
 
-  const caloriesList = profileMeals
-    .map((meal) => meal.calories)
-    .filter((value): value is number => typeof value === "number");
-  const proteinList = profileMeals
-    .map((meal) => meal.proteinG)
-    .filter((value): value is number => typeof value === "number");
-
+  // Promedios DIARIOS de la semana (no por comida): agrupamos por dia local.
+  const byDay = new Map<string, { calories: number; protein: number }>();
+  for (const meal of profileMeals) {
+    const key = new Date(meal.eatenAt).toDateString();
+    const entry = byDay.get(key) ?? { calories: 0, protein: 0 };
+    entry.calories += meal.calories ?? 0;
+    entry.protein += meal.proteinG ?? 0;
+    byDay.set(key, entry);
+  }
+  const dailyTotals = [...byDay.values()];
   const avg = (values: number[]) =>
     values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : null;
 
-  const latestWeight = profileMetrics
+  const latestWeight =
+    profileMetrics.slice().sort((a, b) => (a.measuredAt < b.measuredAt ? 1 : -1))[0]?.weightKg ?? null;
+
+  // Progreso reciente real: ultimo peso registrado por ejercicio en los logs.
+  const seen = new Set<string>();
+  const recentExerciseProgress: DashboardResponse["recentExerciseProgress"] = [];
+  const sortedLogs = (workoutLogs[profileId] ?? [])
     .slice()
-    .sort((a, b) => (a.measuredAt < b.measuredAt ? 1 : -1))[0]?.weightKg ?? null;
+    .sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
+  for (const log of sortedLogs) {
+    for (const set of log.workoutLogSets) {
+      if (!set.weight || !set.exercises || seen.has(set.exerciseId)) continue;
+      seen.add(set.exerciseId);
+      recentExerciseProgress.push({
+        exerciseId: set.exerciseId,
+        exerciseName: set.exercises.name,
+        latestWeight: set.weight,
+        latestReps: set.reps ?? 0,
+        loggedAt: log.startedAt,
+      });
+      if (recentExerciseProgress.length >= 2) break;
+    }
+    if (recentExerciseProgress.length >= 2) break;
+  }
+
+  const todayKey = new Date().toDateString();
+  const todayProtein = byDay.get(todayKey)?.protein ?? 0;
 
   return {
     workoutsLast7Days: profileLogs.length,
     mealsLast7Days: profileMeals.length,
-    averageCalories: avg(caloriesList),
-    averageProteinG: avg(proteinList),
+    averageCalories: avg(dailyTotals.map((entry) => entry.calories)),
+    averageProteinG: avg(dailyTotals.map((entry) => entry.protein)),
     latestWeightKg: latestWeight,
-    recentExerciseProgress: [
-      {
-        exerciseId: exercises[1]!.id,
-        exerciseName: "Press de banca",
-        latestWeight: 72.5,
-        latestReps: 8,
-        loggedAt: daysAgo(1),
-      },
-      {
-        exerciseId: exercises[0]!.id,
-        exerciseName: "Sentadilla con barra",
-        latestWeight: 100,
-        latestReps: 5,
-        loggedAt: daysAgo(3),
-      },
-    ],
+    recentExerciseProgress,
     alerts:
-      proteinList.length && (avg(proteinList) ?? 0) < 100
-        ? ["Vas algo bajo en proteina hoy. Suma una fuente magra en la proxima comida."]
-        : ["Buen ritmo esta semana. Manten la constancia."],
+      todayProtein > 0 && todayProtein < 100
+        ? ["Vas algo bajo en proteína hoy. Suma una fuente magra en la próxima comida."]
+        : ["Buen ritmo esta semana. Mantén la constancia."],
   };
 }
 
@@ -578,7 +727,15 @@ export const demoApi = {
     logs: async (profileId: string): Promise<WorkoutLog[]> =>
       listFor(workoutLogs, profileId).sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1)),
     createLog: async (profileId: string, input: CreateWorkoutLogInput): Promise<WorkoutLog> => {
-      const log: WorkoutLog = {
+      let workoutName: string | null = null;
+      let workoutDayName: string | null = null;
+      if (input.workoutId) {
+        const workout = (workouts[profileId] ?? []).find((entry) => entry.id === input.workoutId);
+        workoutName = workout?.name ?? null;
+        workoutDayName = workout?.workoutDays.find((day) => day.id === input.workoutDayId)?.name ?? null;
+      }
+
+      const log: DemoWorkoutLog = {
         id: uid(),
         profileId,
         workoutId: input.workoutId ?? null,
@@ -588,6 +745,19 @@ export const demoApi = {
         perceivedEffort: input.perceivedEffort ?? null,
         notes: input.notes ?? null,
         createdAt: now(),
+        workoutLogSets: (input.sets ?? []).map((set, index) => ({
+          id: uid(),
+          exerciseId: set.exerciseId,
+          setIndex: set.setIndex ?? index + 1,
+          reps: set.reps ?? null,
+          weight: set.weight ?? null,
+          rpe: set.rpe ?? null,
+          restSeconds: set.restSeconds ?? null,
+          notes: set.notes ?? null,
+          exercises: exercises.find((exercise) => exercise.id === set.exerciseId) ?? null,
+        })),
+        workouts: workoutName ? { name: workoutName } : null,
+        workoutDays: workoutDayName ? { name: workoutDayName } : null,
       };
       (workoutLogs[profileId] ??= []).push(log);
       return log;
