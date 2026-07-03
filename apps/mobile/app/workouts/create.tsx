@@ -15,7 +15,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { CreateWorkoutInput, ExerciseCatalogItem, MuscleGroupId } from "@fitfamily-ai/shared";
 import { MUSCLE_GROUPS } from "@fitfamily-ai/shared";
-import { AIHelperCard } from "@/components/AIHelperCard";
 import { AppButton } from "@/components/AppButton";
 import { Card } from "@/components/Card";
 import { MuscleMap } from "@/components/MuscleMap";
@@ -117,14 +116,6 @@ const experienceOptions: Array<{ value: ExperienceLevel; label: string; helper: 
   { value: "returning", label: "Vuelvo al gym", helper: "Volumen moderado para retomar sin apurarse." },
   { value: "intermediate", label: "Intermedio", helper: "Progresion normal con ejercicios principales." },
   { value: "advanced", label: "Avanzado", helper: "Mas volumen si ya dominas la tecnica." },
-];
-
-const aiPromptChips = [
-  "Sugiere una rutina completa segun mi objetivo",
-  "Estoy recien iniciando, hazla liviana 2 semanas",
-  "Hazla segura para volver al gimnasio",
-  "Prioriza ejercicios efectivos y faciles de progresar",
-  "Dame una version para entrenar con mi hija",
 ];
 
 const bodyPresetLabels: Array<{ value: BodyPreset; label: string }> = [
@@ -478,39 +469,6 @@ export default function CreateWorkoutScreen() {
     }
   }
 
-  async function askAi(prompt: string) {
-    if (!profileId) return;
-    setAiLoading(true);
-    setAiResponse(null);
-    try {
-      const topExercises = exerciseCatalog
-        .slice(0, 18)
-        .map((exercise) => `${exercise.name} (${exercise.tier}, score ${exercise.scienceScore})`)
-        .join(", ");
-      const result = await api.ai.chat(
-        profileId,
-        [
-          prompt,
-          `Objetivo: ${goalLabel}. Frecuencia: ${frequency} dias por semana. Duracion: ${durationLabel}.`,
-          `Nivel declarado: ${experienceLabel(experienceLevel)}.`,
-          aiInstructions.trim()
-            ? `Instrucciones personales para la IA: ${aiInstructions.trim()}`
-            : "El usuario no agrego instrucciones personales adicionales.",
-          `Usa prioridad de ejercicios efectivos y seguros. Catalogo top disponible: ${topExercises}.`,
-          experienceLevel === "new" || experienceLevel === "returning"
-            ? "Si esta iniciando o volviendo al gimnasio, la rutina debe partir liviana por 2 semanas, con foco en tecnica y tolerancia."
-            : "Puede usar progresion normal si la tecnica ya esta dominada.",
-          "Responde con una propuesta por dias, series, repeticiones, descansos y una nota de seguridad. No inventes datos de salud.",
-        ].join("\n"),
-      );
-      setAiResponse(result.message.content);
-    } catch (caught) {
-      setAiResponse(caught instanceof Error ? caught.message : "No pude obtener una sugerencia IA.");
-    } finally {
-      setAiLoading(false);
-    }
-  }
-
   function canAdvanceFromStep(currentStep: number): boolean {
     if (currentStep === 1) return name.trim().length > 0;
     if (currentStep === 2) return days.length === frequency && days.every((day) => day.name.trim().length > 0);
@@ -630,18 +588,16 @@ export default function CreateWorkoutScreen() {
               ))}
             </View>
             <Text style={styles.label}>Duracion</Text>
-            <View style={styles.durationCol}>
+            <View style={styles.chipsRow}>
               {durationOptions.map((option) => (
                 <Pressable
                   key={option.value}
                   onPress={() => setDuration(option.value)}
-                  style={[styles.durationRow, duration === option.value ? styles.durationActive : null]}
+                  style={[styles.chip, duration === option.value ? styles.chipActive : null]}
                 >
-                  <View style={styles.durationText}>
-                    <Text style={styles.durationLabel}>{option.label}</Text>
-                    <Text style={styles.durationHelper}>{option.helper}</Text>
-                  </View>
-                  {duration === option.value ? <Check size={18} color={colors.primary} /> : null}
+                  <Text style={[styles.chipText, duration === option.value ? styles.chipTextActive : null]}>
+                    {option.label}
+                  </Text>
                 </Pressable>
               ))}
             </View>
@@ -684,28 +640,11 @@ export default function CreateWorkoutScreen() {
               disabled={loadingExercises}
               onPress={generateCompleteWorkoutWithAi}
             />
+            <Text style={styles.aiInstructionsHint}>
+              La IA usa tu objetivo, nivel y notas personales para armar un borrador que puedes revisar y editar
+              antes de guardar. Si prefieres armarla tu, sigue con los pasos.
+            </Text>
           </Card>
-
-          <AIHelperCard
-            title="Coach IA para partir mejor"
-            subtitle="Pidele una rutina completa. La app la deja como borrador para revisar antes de guardar."
-            chips={aiPromptChips}
-            onAsk={askAi}
-            response={aiResponse}
-            loading={aiLoading}
-            actions={
-              aiResponse && !aiLoading
-                ? [
-                    {
-                      label: "Aplicar rutina sugerida",
-                      variant: "primary",
-                      onPress: () => applyEvidenceTemplate(4),
-                    },
-                    { label: "Descartar", variant: "ghost", onPress: () => setAiResponse(null) },
-                  ]
-                : []
-            }
-          />
         </View>
       ) : null}
 
@@ -1329,13 +1268,15 @@ function makeStyles(colors: ColorPalette) {
     inputMultiline: { minHeight: 74, textAlignVertical: "top", paddingVertical: 10 },
     aiInstructionsInput: { minHeight: 118, textAlignVertical: "top", paddingVertical: 12 },
     aiInstructionsHint: { color: colors.muted, fontSize: 12, lineHeight: 17 },
-    optionGrid: { gap: 8 },
+    optionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     optionCard: {
+      flexBasis: "47%",
+      flexGrow: 1,
       borderRadius: radius.sm,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.backgroundElevated,
-      padding: 12,
+      padding: 10,
       gap: 2,
     },
     optionActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
