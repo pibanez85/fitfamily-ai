@@ -28,9 +28,20 @@ import {
 } from "@/data/foodCatalog";
 import { useActiveProfileId } from "@/lib/activeProfile";
 import { api } from "@/services/api";
+import { useAppStore } from "@/store/appStore";
+import { computeNutritionGoals } from "@/utils/nutritionGoals";
 import type { ColorPalette } from "@/theme/colors";
 import { radius } from "@/theme/colors";
 import { useTheme } from "@/theme/theme";
+
+// Fraccion de la meta diaria que suele cubrir cada momento del día.
+const MEAL_SHARE: Record<MealForm["mealType"], number> = {
+  breakfast: 0.25,
+  lunch: 0.35,
+  dinner: 0.28,
+  snack: 0.12,
+  other: 0.3,
+};
 
 const MealFormSchema = z.object({
   name: z.string().optional(),
@@ -94,6 +105,19 @@ export default function NewMealScreen() {
 
   const totals = useMemo(() => sumSelectedFoods(selectedFoods), [selectedFoods]);
   const watchedName = watch("name");
+  const watchedMealType = watch("mealType");
+  const profile = useAppStore((state) =>
+    state.profiles.find((entry) => entry.id === state.activeProfileId) ?? null,
+  );
+  const mealGoals = useMemo(() => {
+    const daily = computeNutritionGoals(profile, null);
+    const share = MEAL_SHARE[watchedMealType] ?? 0.3;
+    return {
+      proteinG: Math.round(daily.proteinG * share),
+      carbsG: Math.round(daily.carbsG * share),
+      fatG: Math.round(daily.fatG * share),
+    };
+  }, [profile, watchedMealType]);
   const recentFoods = useMemo(() => uniqueFoods(selectedFoods.map((item) => item.food)).slice(0, 8), [selectedFoods]);
   const favoriteFoods = useMemo(() => foodCatalog.filter((food) => favoriteIds.includes(food.id)).slice(0, 12), [favoriteIds]);
   const displayedResults = useMemo(() => {
@@ -208,7 +232,7 @@ export default function NewMealScreen() {
   return (
     <Screen>
       <Title>Agregar comida</Title>
-      <Subtitle>Busca alimentos chilenos, productos envasados o datos USDA. Ajusta la porcion antes de guardar.</Subtitle>
+      <Subtitle>Busca alimentos chilenos, productos envasados o datos USDA. Ajusta la porción antes de guardar.</Subtitle>
 
       <Card style={styles.summaryCard}>
         <View style={styles.summaryHeader}>
@@ -220,16 +244,16 @@ export default function NewMealScreen() {
         </View>
         <MacroDonut totals={totals} size={132} />
         <View style={styles.progressStack}>
-          <MacroProgress label="Proteina" value={totals.proteinG} goal={45} color={colors.primary} />
-          <MacroProgress label="Carbos" value={totals.carbsG} goal={80} color={colors.energy} />
-          <MacroProgress label="Grasas" value={totals.fatG} goal={25} color={colors.accent} />
+          <MacroProgress label="Proteína" value={totals.proteinG} goal={mealGoals.proteinG} color={colors.primary} />
+          <MacroProgress label="Carbos" value={totals.carbsG} goal={mealGoals.carbsG} color={colors.energy} />
+          <MacroProgress label="Grasas" value={totals.fatG} goal={mealGoals.fatG} color={colors.accent} />
         </View>
       </Card>
 
       <Card>
         <Text style={styles.sectionTitle}>1. Tipo de comida</Text>
         <FormField control={control} name="name" label="Nombre opcional" placeholder="Ej: Almuerzo post entreno" />
-        <ChoiceGroup control={control} name="mealType" label="Momento del dia" options={mealTypeOptions} />
+        <ChoiceGroup control={control} name="mealType" label="Momento del día" options={mealTypeOptions} />
         <DatePickerField control={control} name="eatenDate" label="Fecha" minYear={2020} />
       </Card>
 
@@ -302,7 +326,7 @@ export default function NewMealScreen() {
         {shouldShowResults && displayedResults.length === 0 ? (
           <View style={styles.emptySearch}>
             <Text style={styles.emptyTitle}>No encontramos este alimento</Text>
-            <BodyText style={styles.muted}>Puedes probar otro nombre chileno, buscar por foto o pedir una estimacion a la IA.</BodyText>
+            <BodyText style={styles.muted}>Puedes probar otro nombre chileno, buscar por foto o pedir una estimación a la IA.</BodyText>
             <View style={styles.emptyActions}>
               <Pressable style={styles.emptyButton} onPress={() => router.push("/chat")}>
                 <Text style={styles.emptyButtonText}>Crear alimento</Text>
@@ -338,7 +362,7 @@ export default function NewMealScreen() {
       <Card>
         <Text style={styles.sectionTitle}>3. Revisar porciones</Text>
         {selectedFoods.length === 0 ? (
-          <BodyText style={styles.muted}>Selecciona alimentos para ajustar cantidades y ver macros por porcion.</BodyText>
+          <BodyText style={styles.muted}>Selecciona alimentos para ajustar cantidades y ver macros por porción.</BodyText>
         ) : null}
         {selectedFoods.map((item) => (
           <View key={item.id} style={styles.selectedRow}>
@@ -469,7 +493,7 @@ function FoodDetailSheet({
           />
           <View style={styles.detailMacroGrid}>
             <DetailMacro label="kcal" value={Math.round(macros.calories)} />
-            <DetailMacro label="Proteina" value={`${macros.proteinG} g`} />
+            <DetailMacro label="Proteína" value={`${macros.proteinG} g`} />
             <DetailMacro label="Carbos" value={`${macros.carbsG} g`} />
             <DetailMacro label="Grasas" value={`${macros.fatG} g`} />
             <DetailMacro label="Fibra" value={`${macros.fiberG} g`} />
