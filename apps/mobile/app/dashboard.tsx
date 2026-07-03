@@ -2,6 +2,7 @@ import { router, useFocusEffect } from "expo-router";
 import { Camera, Dumbbell, Ruler, Settings, Watch } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import { ImageBackground, Pressable, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import type { DashboardResponse } from "@fitfamily-ai/shared";
 import { Card } from "@/components/Card";
 import { Screen } from "@/components/Screen";
@@ -54,7 +55,10 @@ export default function DashboardScreen() {
   return (
     <Screen>
       <ImageBackground source={{ uri: gymImages.weights }} imageStyle={styles.heroImage} style={styles.hero}>
-        <View style={styles.heroOverlay} />
+        <LinearGradient
+          colors={["rgba(4, 8, 16, 0.1)", "rgba(4, 8, 16, 0.55)", "rgba(4, 8, 16, 0.92)"]}
+          style={styles.heroOverlay}
+        />
         <View style={styles.heroContent}>
           <View style={styles.heroPillRow}>
             <Text style={styles.heroPill}>Family training</Text>
@@ -163,7 +167,6 @@ function makeStyles(colors: ColorPalette) {
       right: 0,
       bottom: 0,
       left: 0,
-      backgroundColor: "rgba(3, 7, 18, 0.64)",
     },
     heroContent: {
       gap: 13,

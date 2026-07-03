@@ -2,6 +2,7 @@ import type { PropsWithChildren, ReactNode, Ref } from "react";
 import { useMemo } from "react";
 import { usePathname } from "expo-router";
 import { ScrollView, StatusBar, StyleSheet, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BottomNav } from "@/components/BottomNav";
 import { useTheme } from "@/theme/theme";
@@ -22,10 +23,20 @@ export function Screen({ children, scroll = true, scrollRef, overlay }: ScreenPr
   const showBottomNav = !["/", "/login", "/register"].includes(pathname) && !pathname.startsWith("/profiles");
   const barStyle = mode === "dark" ? "light-content" : "dark-content";
 
+  // Resplandor sutil en la parte superior que le da profundidad al fondo.
+  const glow = (
+    <LinearGradient
+      colors={[colors.backgroundGlow, "transparent"]}
+      style={styles.glow}
+      pointerEvents="none"
+    />
+  );
+
   if (!scroll) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle={barStyle} />
+        {glow}
         <View style={styles.body}>
           <View style={styles.content}>{children}</View>
           {overlay ? (
@@ -42,6 +53,7 @@ export function Screen({ children, scroll = true, scrollRef, overlay }: ScreenPr
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle={barStyle} />
+      {glow}
       <View style={styles.body}>
         <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {children}
@@ -62,6 +74,13 @@ function makeStyles(colors: ColorPalette) {
     safeArea: {
       flex: 1,
       backgroundColor: colors.background,
+    },
+    glow: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 340,
     },
     body: {
       flex: 1,
