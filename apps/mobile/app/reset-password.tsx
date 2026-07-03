@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as Linking from "expo-linking";
 import { Link, router } from "expo-router";
 import { KeyRound, ShieldCheck } from "lucide-react-native";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
@@ -15,7 +15,8 @@ import { BodyText, Subtitle, Title } from "@/components/Typography";
 import { supabase } from "@/lib/supabase";
 import { getAuthErrorMessage } from "@/services/authErrors";
 import { withTimeout } from "@/services/asyncUtils";
-import { colors } from "@/theme/colors";
+import type { ColorPalette } from "@/theme/colors";
+import { useTheme } from "@/theme/theme";
 
 const ResetPasswordSchema = z
   .object({
@@ -43,9 +44,11 @@ function readRecoveryParams(url: string) {
 }
 
 export default function ResetPasswordScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [status, setStatus] = useState("Validando enlace de recuperacion...");
+  const [status, setStatus] = useState("Validando enlace de recuperación...");
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const consumedUrl = useRef<string | null>(null);
@@ -77,14 +80,14 @@ export default function ResetPasswordScreen() {
           const { error: exchangeError } = await withTimeout(
             supabase.auth.exchangeCodeForSession(code),
             20000,
-            "No pude validar el enlace de recuperacion a tiempo.",
+            "No pude validar el enlace de recuperación a tiempo.",
           );
           if (exchangeError) throw exchangeError;
         } else if (accessToken && refreshToken) {
           const { error: sessionError } = await withTimeout(
             supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }),
             20000,
-            "No pude abrir la sesion de recuperacion a tiempo.",
+            "No pude abrir la sesión de recuperación a tiempo.",
           );
           if (sessionError) throw sessionError;
         } else {
@@ -129,7 +132,7 @@ export default function ResetPasswordScreen() {
       );
       if (updateError) throw updateError;
 
-      setNotice("Clave actualizada. Ya puedes iniciar sesion con tu nueva clave.");
+      setNotice("Clave actualizada. Ya puedes iniciar sesión con tu nueva clave.");
       await supabase.auth.signOut({ scope: "local" });
       setTimeout(() => router.replace("/login"), 900);
     } catch (caught) {
@@ -166,42 +169,44 @@ export default function ResetPasswordScreen() {
       </Card>
 
       <Link href="/login" style={styles.link}>
-        Volver a iniciar sesion
+        Volver a iniciar sesión
       </Link>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  iconBox: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-    borderRadius: 14,
-    borderWidth: 1,
-    height: 46,
-    justifyContent: "center",
-    width: 46,
-  },
-  error: {
-    color: colors.danger,
-    fontSize: 13,
-  },
-  notice: {
-    color: colors.success,
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  noticeBox: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-  },
-  link: {
-    color: colors.primary,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-});
+function makeStyles(colors: ColorPalette) {
+  return StyleSheet.create({
+    iconBox: {
+      alignItems: "center",
+      alignSelf: "flex-start",
+      backgroundColor: colors.primarySoft,
+      borderColor: colors.primary,
+      borderRadius: 14,
+      borderWidth: 1,
+      height: 46,
+      justifyContent: "center",
+      width: 46,
+    },
+    error: {
+      color: colors.danger,
+      fontSize: 13,
+    },
+    notice: {
+      color: colors.success,
+      flex: 1,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    noticeBox: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+    },
+    link: {
+      color: colors.primary,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+  });
+}

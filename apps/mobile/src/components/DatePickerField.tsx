@@ -1,8 +1,9 @@
 import { Controller, type Control, type FieldValues, type Path } from "react-hook-form";
 import { Calendar, ChevronLeft, ChevronRight, X } from "lucide-react-native";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import { useState } from "react";
-import { colors, radius } from "@/theme/colors";
+import { useMemo, useState } from "react";
+import { radius, type ColorPalette } from "@/theme/colors";
+import { useTheme } from "@/theme/theme";
 
 type DatePickerFieldProps<T extends FieldValues> = {
   control: Control<T>;
@@ -36,6 +37,8 @@ export function DatePickerField<T extends FieldValues>({
   minYear = 1920,
   maxYear = new Date().getFullYear(),
 }: DatePickerFieldProps<T>) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [open, setOpen] = useState(false);
   const [visibleDate, setVisibleDate] = useState(() => new Date());
 
@@ -168,7 +171,8 @@ function formatDisplayDate(date: Date) {
   return `${day}/${month}/${date.getFullYear()}`;
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ColorPalette) {
+  return StyleSheet.create({
   group: {
     gap: 6,
   },
@@ -271,7 +275,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   selectedDayText: {
-    color: "#ffffff",
+    color: colors.onPrimary,
   },
   actions: {
     flexDirection: "row",
@@ -295,7 +299,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   doneText: {
-    color: "#ffffff",
+    color: colors.onPrimary,
     fontWeight: "900",
   },
-});
+  });
+}

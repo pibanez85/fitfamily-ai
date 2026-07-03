@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { Camera, ImagePlus } from "lucide-react-native";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { AppButton } from "@/components/AppButton";
 import { Card } from "@/components/Card";
@@ -10,9 +10,12 @@ import { useActiveProfileId } from "@/lib/activeProfile";
 import { api } from "@/services/api";
 import { pickAndUploadImageFromSource } from "@/services/storage";
 import { useAppStore } from "@/store/appStore";
-import { colors } from "@/theme/colors";
+import type { ColorPalette } from "@/theme/colors";
+import { useTheme } from "@/theme/theme";
 
 export default function FoodPhotoScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const profileId = useActiveProfileId();
   const setPendingFoodAnalysis = useAppStore((state) => state.setPendingFoodAnalysis);
   const [loading, setLoading] = useState(false);
@@ -23,14 +26,14 @@ export default function FoodPhotoScreen() {
     if (!profileId) return;
     setLoading(true);
     setError(null);
-    setStatus(source === "camera" ? "Abriendo camara..." : "Abriendo galeria...");
+    setStatus(source === "camera" ? "Abriendo camara..." : "Abriendo galería...");
     try {
       const upload = await pickAndUploadImageFromSource("meal-photos", profileId, source);
       if (!upload) {
         setStatus(null);
         return;
       }
-      setStatus("Subiendo foto y preparando analisis...");
+      setStatus("Subiendo foto y preparando análisis...");
       const analysis = await api.ai.analyzeFood(profileId, upload.signedUrl);
       setPendingFoodAnalysis(analysis);
       router.push("/meals/analysis");
@@ -45,7 +48,7 @@ export default function FoodPhotoScreen() {
   return (
     <Screen>
       <Title>Subir foto de comida</Title>
-      <Subtitle>La foto se sube a Supabase Storage y la IA corre solo desde el backend.</Subtitle>
+      <Subtitle>Saca una foto a tu plato y la IA estima calorías y macros por ti.</Subtitle>
       <Card>
         <BodyText>
           Usa buena luz y encuadra el plato completo. Si hay salsas, aceites o ingredientes ocultos, agregalos
@@ -62,7 +65,7 @@ export default function FoodPhotoScreen() {
             style={styles.action}
           />
           <AppButton
-            label="Elegir desde galeria"
+            label="Elegir desde galería"
             icon={ImagePlus}
             variant="secondary"
             disabled={loading}
@@ -75,21 +78,23 @@ export default function FoodPhotoScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  actions: {
-    gap: 10,
-  },
-  action: {
-    width: "100%",
-  },
-  error: {
-    color: colors.danger,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  status: {
-    color: colors.energy,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-});
+function makeStyles(colors: ColorPalette) {
+  return StyleSheet.create({
+    actions: {
+      gap: 10,
+    },
+    action: {
+      width: "100%",
+    },
+    error: {
+      color: colors.danger,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    status: {
+      color: colors.energy,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+  });
+}

@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from "expo-router";
 import { Check, Plus, UserRoundCheck } from "lucide-react-native";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AppButton } from "@/components/AppButton";
 import { Card } from "@/components/Card";
@@ -9,9 +9,12 @@ import { EmptyState, LoadingState } from "@/components/StateViews";
 import { Subtitle, Title } from "@/components/Typography";
 import { api } from "@/services/api";
 import { useAppStore } from "@/store/appStore";
-import { colors } from "@/theme/colors";
+import type { ColorPalette } from "@/theme/colors";
+import { useTheme } from "@/theme/theme";
 
 export default function ProfilesScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const profiles = useAppStore((state) => state.profiles);
@@ -74,7 +77,7 @@ export default function ProfilesScreen() {
                 </View>
                 {selected ? (
                   <View style={styles.check}>
-                    <Check size={16} color="#071013" />
+                    <Check size={16} color={colors.onPrimary} />
                   </View>
                 ) : (
                   <UserRoundCheck size={22} color={colors.subtle} />
@@ -89,7 +92,8 @@ export default function ProfilesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ColorPalette) {
+  return StyleSheet.create({
   profileCard: {
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
@@ -146,4 +150,5 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 13,
   },
-});
+  });
+}

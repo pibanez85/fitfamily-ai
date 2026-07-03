@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { Pencil, Play } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import { AppButton } from "@/components/AppButton";
 import { Card } from "@/components/Card";
@@ -8,7 +8,8 @@ import { Screen } from "@/components/Screen";
 import { LoadingState } from "@/components/StateViews";
 import { BodyText, Subtitle, Title } from "@/components/Typography";
 import { api } from "@/services/api";
-import { colors } from "@/theme/colors";
+import type { ColorPalette } from "@/theme/colors";
+import { useTheme } from "@/theme/theme";
 
 type WorkoutDetail = {
   id: string;
@@ -28,6 +29,8 @@ type WorkoutDetail = {
 };
 
 export default function WorkoutDetailScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { workoutId } = useLocalSearchParams<{ workoutId: string }>();
   const [workout, setWorkout] = useState<WorkoutDetail | null>(null);
 
@@ -62,7 +65,7 @@ export default function WorkoutDetailScreen() {
               </BodyText>
             ))}
             <AppButton
-              label="Registrar este dia"
+              label="Registrar este día"
               icon={Play}
               onPress={() =>
                 router.push({
@@ -81,10 +84,12 @@ export default function WorkoutDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  day: {
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: "900",
-  },
-});
+function makeStyles(colors: ColorPalette) {
+  return StyleSheet.create({
+    day: {
+      color: colors.text,
+      fontSize: 17,
+      fontWeight: "900",
+    },
+  });
+}

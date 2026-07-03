@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { router } from "expo-router";
 import { Save } from "lucide-react-native";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
@@ -16,7 +16,8 @@ import { BodyText, Subtitle, Title } from "@/components/Typography";
 import { useActiveProfileId } from "@/lib/activeProfile";
 import { api } from "@/services/api";
 import { useAppStore } from "@/store/appStore";
-import { colors } from "@/theme/colors";
+import type { ColorPalette } from "@/theme/colors";
+import { useTheme } from "@/theme/theme";
 
 const ConfirmMealSchema = z.object({
   name: z.string().min(1, "Nombre requerido"),
@@ -32,6 +33,8 @@ const ConfirmMealSchema = z.object({
 type ConfirmMealForm = z.infer<typeof ConfirmMealSchema>;
 
 export default function ConfirmMealScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const profileId = useActiveProfileId();
   const analysis = useAppStore((state) => state.pendingFoodAnalysis);
   const setPendingFoodAnalysis = useAppStore((state) => state.setPendingFoodAnalysis);
@@ -47,7 +50,7 @@ export default function ConfirmMealScreen() {
       carbsG: String(analysis?.totals.carbsG ?? ""),
       fatG: String(analysis?.totals.fatG ?? ""),
       fiberG: String(analysis?.totals.fiberG ?? ""),
-      notes: analysis ? `Guardado desde analisis IA ${analysis.analysisId}` : "",
+      notes: analysis ? `Guardado desde análisis IA ${analysis.analysisId}` : "",
     },
   });
 
@@ -103,7 +106,7 @@ export default function ConfirmMealScreen() {
         <Text style={styles.name}>{watch("name") || analysis.estimatedMealName}</Text>
         <View style={styles.metrics}>
           <MetricPill label="kcal" value={watch("calories") || "0"} tone="energy" />
-          <MetricPill label="proteina" value={`${watch("proteinG") || "0"}g`} tone="primary" />
+          <MetricPill label="proteína" value={`${watch("proteinG") || "0"}g`} tone="primary" />
           <MetricPill label="carbos" value={`${watch("carbsG") || "0"}g`} />
           <MetricPill label="grasas" value={`${watch("fatG") || "0"}g`} />
         </View>
@@ -114,10 +117,10 @@ export default function ConfirmMealScreen() {
         <ChoiceGroup control={control} name="mealType" label="Tipo de comida" options={mealTypeOptions} />
         <View style={styles.grid}>
           <View style={styles.gridItem}>
-            <FormField control={control} name="calories" label="Calorias" keyboardType="numeric" />
+            <FormField control={control} name="calories" label="Calorías" keyboardType="numeric" />
           </View>
           <View style={styles.gridItem}>
-            <FormField control={control} name="proteinG" label="Proteina g" keyboardType="numeric" />
+            <FormField control={control} name="proteinG" label="Proteína g" keyboardType="numeric" />
           </View>
           <View style={styles.gridItem}>
             <FormField control={control} name="carbsG" label="Carbos g" keyboardType="numeric" />
@@ -161,43 +164,45 @@ const mealTypeOptions: ChoiceOption[] = [
   { label: "Otro", value: "other" },
 ];
 
-const styles = StyleSheet.create({
-  summaryCard: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
-  },
-  name: {
-    color: colors.text,
-    fontWeight: "900",
-    fontSize: 20,
-  },
-  metrics: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  gridItem: {
-    width: "48%",
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  item: {
-    color: colors.muted,
-    fontSize: 13,
-  },
-  disclaimer: {
-    color: colors.warning,
-    fontSize: 13,
-  },
-  error: {
-    color: colors.danger,
-  },
-});
+function makeStyles(colors: ColorPalette) {
+  return StyleSheet.create({
+    summaryCard: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primarySoft,
+    },
+    name: {
+      color: colors.text,
+      fontWeight: "900",
+      fontSize: 20,
+    },
+    metrics: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    grid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+    },
+    gridItem: {
+      width: "48%",
+    },
+    sectionTitle: {
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    item: {
+      color: colors.muted,
+      fontSize: 13,
+    },
+    disclaimer: {
+      color: colors.warning,
+      fontSize: 13,
+    },
+    error: {
+      color: colors.danger,
+    },
+  });
+}

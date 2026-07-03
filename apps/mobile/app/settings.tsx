@@ -40,14 +40,13 @@ export default function SettingsScreen() {
 
   return (
     <Screen>
-      <Title>Configuracion</Title>
-      <Subtitle>Gestion familiar, sesion y apariencia.</Subtitle>
+      <Title>Configuración</Title>
+      <Subtitle>Gestión familiar, sesión y apariencia.</Subtitle>
 
       <Card>
         <Text style={styles.sectionTitle}>Apariencia</Text>
         <BodyText style={styles.statusBody}>
-          La estructura del tema soporta claro y oscuro. El modo oscuro esta optimizado y el modo claro
-          se va migrando pantalla por pantalla.
+          Elige el tema que prefieras. Toda la app soporta modo claro y oscuro.
         </BodyText>
         <View style={styles.segmented}>
           <Pressable
@@ -99,7 +98,7 @@ export default function SettingsScreen() {
         />
         {diagnostic ? <BodyText style={styles.diagnostic}>{diagnostic}</BodyText> : null}
         <AppButton label="Cambiar perfil" icon={Users} variant="secondary" onPress={() => router.push("/profiles")} />
-        <AppButton label="Cerrar sesion" icon={LogOut} variant="danger" onPress={signOut} />
+        <AppButton label="Cerrar sesión" icon={LogOut} variant="danger" onPress={signOut} />
       </Card>
     </Screen>
   );

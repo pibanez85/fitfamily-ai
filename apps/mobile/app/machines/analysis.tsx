@@ -1,18 +1,22 @@
+import { useMemo } from "react";
 import { StyleSheet, Text } from "react-native";
 import { Card } from "@/components/Card";
 import { Screen } from "@/components/Screen";
 import { EmptyState } from "@/components/StateViews";
 import { BodyText, Subtitle, Title } from "@/components/Typography";
 import { useAppStore } from "@/store/appStore";
-import { colors } from "@/theme/colors";
+import type { ColorPalette } from "@/theme/colors";
+import { useTheme } from "@/theme/theme";
 
 export default function MachineAnalysisScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const analysis = useAppStore((state) => state.pendingMachineAnalysis);
 
   if (!analysis) {
     return (
       <Screen>
-        <EmptyState title="Sin analisis activo" body="Sube una foto de maquina para ver resultados." />
+        <EmptyState title="Sin análisis activo" body="Sube una foto de máquina para ver resultados." />
       </Screen>
     );
   }
@@ -30,7 +34,7 @@ export default function MachineAnalysisScreen() {
         ))}
       </Card>
       <Card>
-        <Text style={styles.heading}>Musculos</Text>
+        <Text style={styles.heading}>Músculos</Text>
         <BodyText>Principales: {analysis.primaryMuscles.join(", ") || "sin dato"}</BodyText>
         <BodyText>Secundarios: {analysis.secondaryMuscles.join(", ") || "sin dato"}</BodyText>
       </Card>
@@ -57,13 +61,15 @@ export default function MachineAnalysisScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  heading: {
-    color: colors.text,
-    fontWeight: "900",
-    fontSize: 16,
-  },
-  disclaimer: {
-    color: colors.warning,
-  },
-});
+function makeStyles(colors: ColorPalette) {
+  return StyleSheet.create({
+    heading: {
+      color: colors.text,
+      fontWeight: "900",
+      fontSize: 16,
+    },
+    disclaimer: {
+      color: colors.warning,
+    },
+  });
+}
