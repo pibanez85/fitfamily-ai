@@ -149,7 +149,6 @@ export default function WorkoutLogScreen() {
   const [defaultRestSeconds, setDefaultRestSeconds] = useState("90");
   const [timerFinished, setTimerFinished] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
-  const timerYRef = useRef(0);
 
   useEffect(() => {
     if (!workoutId) {
@@ -214,6 +213,18 @@ export default function WorkoutLogScreen() {
   }, [timerLabel, timerRunning]);
 
   function updateSet(exerciseIndex: number, setIndex: number, patch: Partial<SetDraft>) {
+    // Al completar una serie, el descanso arranca solo con el tiempo
+    // configurado para ese ejercicio (visible en el cronometro flotante).
+    if (patch.done === true) {
+      const exercise = exerciseLogs[exerciseIndex];
+      const set = exercise?.sets[setIndex];
+      if (exercise && set) {
+        startRest(
+          parseIntOrNull(set.restSeconds) ?? exercise.targetRestSeconds,
+          `${exercise.exerciseName} - serie ${setIndex + 1}`,
+        );
+      }
+    }
     setExerciseLogs((current) =>
       current.map((exercise, i) =>
         i === exerciseIndex
@@ -274,9 +285,12 @@ export default function WorkoutLogScreen() {
     setTimerLabel(label);
     setTimerRunning(seconds > 0);
     setTimerFinished(false);
-    setTimeout(() => {
-      scrollRef.current?.scrollTo({ y: Math.max(timerYRef.current - 12, 0), animated: true });
-    }, 50);
+  }
+
+  function extendTimer(seconds: number) {
+    setTimerSeconds((current) => current + seconds);
+    setTimerFinished(false);
+    setTimerRunning(true);
   }
 
   function pauseTimer() {
@@ -461,8 +475,25 @@ export default function WorkoutLogScreen() {
     );
   }
 
+  const timerVisible = timerRunning || timerSeconds > 0 || timerFinished;
+
   return (
-    <Screen scrollRef={scrollRef}>
+    <Screen
+      scrollRef={scrollRef}
+      overlay={
+        timerVisible ? (
+          <FloatingRestTimer
+            seconds={timerSeconds}
+            running={timerRunning}
+            finished={timerFinished}
+            label={timerLabel}
+            onToggle={() => setTimerRunning((current) => (timerSeconds > 0 ? !current : false))}
+            onExtend={() => extendTimer(30)}
+            onDismiss={resetTimer}
+          />
+        ) : null
+      }
+    >
       <Title>Entrenar hoy</Title>
       <Subtitle>
         {workout.name}
@@ -477,21 +508,19 @@ export default function WorkoutLogScreen() {
         completedExercises={completedExercises}
       />
 
-      <View onLayout={(event) => { timerYRef.current = event.nativeEvent.layout.y; }}>
-        <RestTimerCard
-          seconds={timerSeconds}
-          running={timerRunning}
-          label={timerLabel}
-          defaultRestSeconds={defaultRestSeconds}
-          finished={timerFinished}
-          onDefaultRestChange={setDefaultRestSeconds}
-          onStart={() => setTimerRunning(timerSeconds > 0)}
-          onPause={pauseTimer}
-          onReset={resetTimer}
-          onSkip={skipTimer}
-          onPreset={(seconds) => startRest(seconds, "Descanso libre")}
-        />
-      </View>
+      <RestTimerCard
+        seconds={timerSeconds}
+        running={timerRunning}
+        label={timerLabel}
+        defaultRestSeconds={defaultRestSeconds}
+        finished={timerFinished}
+        onDefaultRestChange={setDefaultRestSeconds}
+        onStart={() => setTimerRunning(timerSeconds > 0)}
+        onPause={pauseTimer}
+        onReset={resetTimer}
+        onSkip={skipTimer}
+        onPreset={(seconds) => startRest(seconds, "Descanso libre")}
+      />
 
       <Card>
         <Text style={styles.sectionTitle}>Dia de rutina</Text>
@@ -695,6 +724,58 @@ function RestTimerCard({
         ))}
       </View>
     </Card>
+  );
+}
+
+// Chip flotante: mantiene el descanso a la vista aunque el usuario este
+// registrando el ultimo ejercicio de una pantalla larga.
+function FloatingRestTimer({
+  seconds,
+  running,
+  finished,
+  label,
+  onToggle,
+  onExtend,
+  onDismiss,
+}: {
+  seconds: number;
+  running: boolean;
+  finished: boolean;
+  label: string | null;
+  onToggle: () => void;
+  onExtend: () => void;
+  onDismiss: () => void;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  return (
+    <View style={[styles.floatingTimer, finished ? styles.floatingTimerDone : null]}>
+      <View style={styles.floatingTimerIcon}>
+        {finished ? <Bell size={18} color={colors.onPrimary} /> : <Timer size={18} color={colors.onPrimary} />}
+      </View>
+      <View style={styles.floatingTimerTextCol}>
+        <Text style={styles.floatingTimerValue}>{finished ? "¡Listo!" : formatTime(seconds)}</Text>
+        {label ? (
+          <Text style={styles.floatingTimerLabel} numberOfLines={1}>
+            {finished ? "Siguiente serie" : label}
+          </Text>
+        ) : null}
+      </View>
+      {finished ? null : (
+        <>
+          <Pressable onPress={onToggle} hitSlop={6} style={styles.floatingTimerButton}>
+            {running ? <Pause size={17} color={colors.text} /> : <Play size={17} color={colors.text} />}
+          </Pressable>
+          <Pressable onPress={onExtend} hitSlop={6} style={styles.floatingTimerButton}>
+            <Text style={styles.floatingTimerExtend}>+30s</Text>
+          </Pressable>
+        </>
+      )}
+      <Pressable onPress={onDismiss} hitSlop={6} style={styles.floatingTimerButton}>
+        <CheckCircle2 size={17} color={finished ? colors.energy : colors.text} />
+      </Pressable>
+    </View>
   );
 }
 
@@ -1112,6 +1193,46 @@ function makeStyles(colors: ColorPalette) {
     },
     statValue: { color: colors.text, fontSize: 20, fontWeight: "900" },
     statLabel: { color: colors.muted, fontSize: 11, fontWeight: "800" },
+    floatingTimer: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      borderRadius: radius.md,
+      borderWidth: 1.5,
+      borderColor: colors.primary,
+      backgroundColor: colors.backgroundElevated,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.35,
+      shadowRadius: 10,
+      elevation: 8,
+    },
+    floatingTimerDone: { borderColor: colors.energy, backgroundColor: colors.energySoft },
+    floatingTimerIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: radius.sm,
+      backgroundColor: colors.primary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    floatingTimerTextCol: { flex: 1, gap: 1 },
+    floatingTimerValue: { color: colors.text, fontSize: 19, fontWeight: "900", fontVariant: ["tabular-nums"] },
+    floatingTimerLabel: { color: colors.muted, fontSize: 11, fontWeight: "700" },
+    floatingTimerButton: {
+      minWidth: 38,
+      minHeight: 38,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 6,
+    },
+    floatingTimerExtend: { color: colors.primary, fontWeight: "900", fontSize: 12 },
     timerCard: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
     timerCardDone: { borderColor: colors.energy, backgroundColor: colors.energySoft },
     timerHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
