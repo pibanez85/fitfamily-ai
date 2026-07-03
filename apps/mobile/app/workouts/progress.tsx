@@ -67,7 +67,7 @@ export default function ExerciseProgressScreen() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {!loading && progress.length === 0 ? (
         <EmptyState
-          title="Aun no hay series registradas"
+          title="Aún no hay series registradas"
           body="Guarda entrenamientos con repeticiones y peso para ver graficas de avance."
         />
       ) : null}

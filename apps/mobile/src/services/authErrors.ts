@@ -30,11 +30,11 @@ export function getAuthErrorMessage(error: unknown): string {
   }
 
   if (message.includes("email not confirmed")) {
-    return "Tu email aun no esta confirmado. Revisa tu correo antes de iniciar sesion.";
+    return "Tu email aún no esta confirmado. Revisa tu correo antes de iniciar sesión.";
   }
 
   if (message.includes("user already registered") || message.includes("already registered")) {
-    return "Ese email ya esta registrado. Prueba iniciar sesion.";
+    return "Ese email ya esta registrado. Prueba iniciar sesión.";
   }
 
   if (message.includes("signup") && message.includes("disabled")) {

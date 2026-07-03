@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from "expo-router";
-import { Play, Plus } from "lucide-react-native";
+import { ListChecks, Play, Plus } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AIHelperCard } from "@/components/AIHelperCard";
@@ -37,11 +37,11 @@ type WorkoutDetail = {
 };
 
 const trainingPrompts = [
-  "No tengo esa maquina hoy, dame alternativa",
-  "Tengo solo 35 minutos, reduce el dia",
-  "Hoy quiero entrenar mas liviano",
+  "No tengo esa máquina hoy, dame alternativa",
+  "Tengo solo 35 minutos, reduce el día",
+  "Hoy quiero entrenar más liviano",
   "Me duele el hombro, que evito",
-  "Sugiere progresion para la proxima semana",
+  "Sugiere progresión para la próxima semana",
 ];
 
 export default function TodayScreen() {
@@ -101,7 +101,7 @@ export default function TodayScreen() {
     setAiResponse(null);
     try {
       const context = workout && selectedDay
-        ? ` Rutina activa: ${workout.name}. Dia: ${selectedDay.name} con ejercicios ${
+        ? ` Rutina activa: ${workout.name}. Día: ${selectedDay.name} con ejercicios ${
             (selectedDay.workoutDayExercises ?? [])
               .map((entry) => entry.exercises?.name ?? "ejercicio")
               .join(", ") || "(sin ejercicios)"
@@ -118,21 +118,30 @@ export default function TodayScreen() {
 
   return (
     <Screen>
-      <Title>{profile ? `Hola, ${profile.displayName}` : "Rutina de hoy"}</Title>
-      <Subtitle>Tu rutina activa con la opcion de adaptar el dia con IA antes de empezar.</Subtitle>
+      <Title>Entrenamiento</Title>
+      <Subtitle>
+        {profile ? `${profile.displayName}, esta` : "Esta"} es tu rutina activa. Puedes adaptar el día con IA
+        antes de empezar.
+      </Subtitle>
 
       {loading ? <LoadingState /> : null}
 
       {!loading && !workout ? (
         <Card>
           <EmptyState
-            title="Aun no tienes rutina activa"
-            body="Crea una rutina y marcala como activa para que aparezca aqui."
+            title="Aún no tienes rutina activa"
+            body="Crea una rutina y marcala como activa para que aparezca aquí."
           />
           <AppButton
             label="Crear rutina"
             icon={Plus}
             onPress={() => router.push("/workouts/create")}
+          />
+          <AppButton
+            label="Ver mis rutinas"
+            icon={ListChecks}
+            variant="secondary"
+            onPress={() => router.push("/workouts")}
           />
         </Card>
       ) : null}
@@ -141,7 +150,7 @@ export default function TodayScreen() {
         <Card>
           <Text style={styles.workoutName}>{workout.name}</Text>
           <BodyText style={styles.workoutMeta}>
-            {workout.goal ?? workout.description ?? "Rutina sin descripcion."}
+            {workout.goal ?? workout.description ?? "Rutina sin descripción."}
           </BodyText>
 
           <View style={styles.daySelector}>
@@ -165,7 +174,7 @@ export default function TodayScreen() {
             <View style={styles.dayBlock}>
               <Text style={styles.dayTitle}>{selectedDay.name}</Text>
               {(selectedDay.workoutDayExercises ?? []).length === 0 ? (
-                <BodyText style={styles.muted}>Este dia no tiene ejercicios todavia.</BodyText>
+                <BodyText style={styles.muted}>Este día no tiene ejercicios todavía.</BodyText>
               ) : (
                 (selectedDay.workoutDayExercises ?? []).map((entry) => (
                   <View key={entry.id} style={styles.exerciseRow}>
@@ -195,12 +204,18 @@ export default function TodayScreen() {
               })
             }
           />
+          <AppButton
+            label="Mis rutinas e historial"
+            icon={ListChecks}
+            variant="secondary"
+            onPress={() => router.push("/workouts")}
+          />
         </Card>
       ) : null}
 
       {workout ? (
         <AIHelperCard
-          title="Adapta el dia con tu coach IA"
+          title="Adapta el día con tu coach IA"
           subtitle="Pide alternativas, ajusta tiempo, evita molestias. Tu confirmas antes de aplicar."
           chips={trainingPrompts}
           onAsk={askAi}
@@ -214,7 +229,7 @@ export default function TodayScreen() {
                     variant: "primary",
                     onPress: () =>
                       setAiResponse(
-                        "Cambio aplicado SOLO al dia de hoy (en memoria). La rutina base no se modifica.",
+                        "Cambio aplicado SOLO al día de hoy (en memoria). La rutina base no se modifica.",
                       ),
                   },
                   {

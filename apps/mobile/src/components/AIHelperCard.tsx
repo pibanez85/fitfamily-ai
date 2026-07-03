@@ -23,7 +23,7 @@ type AIHelperCardProps = {
 
 /**
  * Tarjeta reutilizable de asistencia IA contextual.
- * - chips: preguntas/prompts rapidos.
+ * - chips: preguntas/prompts rápidos.
  * - onAsk(prompt): el caller envia el prompt al backend (api.ai.chat) con el contexto que corresponda.
  * - response/loading: estado de la respuesta para mostrar al usuario.
  * - actions: botones que el caller renderiza cuando la respuesta es aplicable

@@ -62,8 +62,7 @@ export function MacroDonut({ totals, size = 152 }: MacroDonutProps) {
                 strokeLinecap="round"
                 strokeDasharray={`${dash} ${circumference - dash}`}
                 strokeDashoffset={-currentOffset}
-                rotation="-90"
-                origin={`${size / 2}, ${size / 2}`}
+                transform={`rotate(-90, ${size / 2}, ${size / 2})`}
               />
             );
           })}

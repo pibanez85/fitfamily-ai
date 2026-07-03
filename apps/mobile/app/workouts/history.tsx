@@ -63,8 +63,8 @@ export default function WorkoutHistoryScreen() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {!loading && logs.length === 0 ? (
         <EmptyState
-          title="Sin historial todavia"
-          body="Cuando guardes un entrenamiento, aqui veras volumen, series, duracion y mejores ejercicios."
+          title="Sin historial todavía"
+          body="Cuando guardes un entrenamiento, aquí veras volumen, series, duración y mejores ejercicios."
         />
       ) : null}
 
@@ -74,7 +74,7 @@ export default function WorkoutHistoryScreen() {
             <Kpi icon={<Dumbbell size={17} color={colors.primary} />} label="Sesiones" value={String(logs.length)} />
             <Kpi icon={<Flame size={17} color={colors.energy} />} label="Volumen" value={formatVolume(metrics.totalVolume)} />
             <Kpi icon={<Gauge size={17} color={colors.accent} />} label="RPE prom." value={metrics.averageRpe ?? "-"} />
-            <Kpi icon={<Timer size={17} color={colors.success} />} label="Duracion" value={metrics.averageDuration} />
+            <Kpi icon={<Timer size={17} color={colors.success} />} label="Duración" value={metrics.averageDuration} />
           </View>
 
           <Card>

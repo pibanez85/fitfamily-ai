@@ -1,11 +1,25 @@
 import "react-native-gesture-handler";
 import { useEffect, useState } from "react";
 import { Stack } from "expo-router";
+import { Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { LoadingState } from "@/components/StateViews";
 import { supabase } from "@/lib/supabase";
 import { useAppStore } from "@/store/appStore";
 import { ThemeProvider, useTheme } from "@/theme/theme";
+
+// react-native-svg (usado por los iconos lucide) filtra mal los props del
+// sistema Responder en web y React DOM reclama con "Unknown event handler
+// property onResponder...". Es ruido de la libreria, no un error nuestro:
+// lo silenciamos SOLO para ese mensaje y solo en desarrollo web.
+if (__DEV__ && Platform.OS === "web") {
+  const originalConsoleError = console.error.bind(console);
+  console.error = (...args: unknown[]) => {
+    const first = typeof args[0] === "string" ? args[0] : "";
+    if (first.includes("Unknown event handler property")) return;
+    originalConsoleError(...args);
+  };
+}
 
 export default function RootLayout() {
   return (

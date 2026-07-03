@@ -87,9 +87,9 @@ export default function ExerciseDetailScreen() {
         profileId,
         [
           `Explicame como ejecutar este ejercicio de forma practica y segura: ${exercise.name}.`,
-          `Musculos principales: ${labelMuscles(exercise.muscleGroupIds).join(", ")}.`,
+          `Músculos principales: ${labelMuscles(exercise.muscleGroupIds).join(", ")}.`,
           `Equipo: ${exercise.libraryEquipment}. Patron: ${exercise.movementPattern}.`,
-          "Incluye pasos, errores comunes, alternativas si no tengo la maquina y una advertencia de seguridad breve.",
+          "Incluye pasos, errores comunes, alternativas si no tengo la máquina y una advertencia de seguridad breve.",
           "Si menciono dolor, lesion o sintomas preocupantes, recomienda consultar a un profesional.",
         ].join("\n"),
       );
@@ -167,7 +167,7 @@ export default function ExerciseDetailScreen() {
       </Card>
 
       <Card>
-        <Text style={styles.sectionTitle}>Descripcion del ejercicio</Text>
+        <Text style={styles.sectionTitle}>Descripción del ejercicio</Text>
         <InfoRow icon={Dumbbell} title="Partes del cuerpo" value={primaryMuscles.join(", ") || "General"} />
         <InfoRow icon={ShieldCheck} title="Capacidad" value={tierLabel(exercise.tier)} />
         <InfoRow icon={RefreshCcw} title="Equipamiento" value={exercise.libraryEquipment} />
@@ -179,10 +179,10 @@ export default function ExerciseDetailScreen() {
       <InfoList title="Errores comunes" items={mistakes} />
       <InfoList title="Consejos de seguridad" items={safety} />
       <InfoList title="Variantes" items={variants} />
-      <InfoList title="Alternativas si no tienes la maquina" items={alternatives} />
+      <InfoList title="Alternativas si no tienes la máquina" items={alternatives} />
 
       <Card>
-        <Text style={styles.sectionTitle}>Musculos trabajados</Text>
+        <Text style={styles.sectionTitle}>Músculos trabajados</Text>
         <View style={styles.muscleTags}>
           {primaryMuscles.map((muscle) => (
             <Text key={`primary-${muscle}`} style={styles.primaryTag}>{muscle}</Text>
@@ -359,14 +359,14 @@ function buildSafetyTips(exercise: ExerciseCatalogItem): string[] {
 
 function buildVariants(exercise: ExerciseCatalogItem): string[] {
   return [
-    `${exercise.name} con carga mas ligera y tempo controlado.`,
+    `${exercise.name} con carga más ligera y tempo controlado.`,
     `${exercise.name} unilateral si necesitas corregir diferencias.`,
-    `${exercise.name} en maquina, polea o mancuernas segun disponibilidad.`,
+    `${exercise.name} en máquina, polea o mancuernas segun disponibilidad.`,
   ];
 }
 
 function buildAlternatives(exercise: ExerciseCatalogItem): string[] {
-  if (exercise.muscleGroupIds.includes("pecho")) return ["Press con mancuernas", "Press en maquina", "Flexiones controladas"];
+  if (exercise.muscleGroupIds.includes("pecho")) return ["Press con mancuernas", "Press en máquina", "Flexiones controladas"];
   if (exercise.muscleGroupIds.includes("espalda")) return ["Remo con mancuerna", "Jalon al pecho", "Remo sentado en polea"];
   if (exercise.muscleGroupIds.includes("cuadriceps")) return ["Prensa de piernas", "Sentadilla goblet", "Split squat bulgaro"];
   if (exercise.muscleGroupIds.includes("gluteos")) return ["Hip thrust", "Glute bridge", "Pull through en polea"];
