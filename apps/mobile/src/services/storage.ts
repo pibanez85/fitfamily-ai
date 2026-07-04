@@ -1,5 +1,7 @@
+import { Platform } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
+import { readAsStringAsync } from "expo-file-system/legacy";
 import { isDemoMode } from "@/config/env";
 import { supabase } from "@/lib/supabase";
 
@@ -38,13 +40,14 @@ export async function pickAndUploadImageFromSource(
 
   const { data: sessionData } = await supabase.auth.getSession();
   const userId = sessionData.session?.user.id;
-  if (!userId) throw new Error("Sesion no disponible.");
+  if (!userId) {
+    throw new Error("Tu sesión expiró. Cierra sesión y vuelve a entrar para subir fotos.");
+  }
 
-  const response = await fetch(normalized.uri);
-  const blob = await response.blob();
+  const body = await readImageBody(normalized.uri);
   const path = `${userId}/${profileId}/${Date.now()}.jpg`;
 
-  const { error } = await supabase.storage.from(bucket).upload(path, blob, {
+  const { error } = await supabase.storage.from(bucket).upload(path, body, {
     contentType: "image/jpeg",
     upsert: false,
   });
@@ -63,6 +66,32 @@ export async function pickAndUploadImageFromSource(
     path,
     signedUrl: data.signedUrl,
   };
+}
+
+// En nativo (sobre todo Android), fetch("file://...") falla con
+// "Network request failed", asi que leemos el archivo como base64 y subimos
+// un ArrayBuffer. En web el blob funciona bien.
+async function readImageBody(uri: string): Promise<Blob | ArrayBuffer> {
+  if (Platform.OS === "web") {
+    const response = await fetch(uri);
+    return response.blob();
+  }
+
+  try {
+    const base64 = await readAsStringAsync(uri, { encoding: "base64" });
+    return base64ToArrayBuffer(base64);
+  } catch {
+    throw new Error("No pude leer la foto desde el dispositivo. Intenta con otra imagen.");
+  }
+}
+
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binary = globalThis.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes.buffer;
 }
 
 async function pickImageFromLibrary() {
