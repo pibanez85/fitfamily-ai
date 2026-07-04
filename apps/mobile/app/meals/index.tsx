@@ -1,5 +1,7 @@
 import { router, useFocusEffect } from "expo-router";
-import { Bot, Camera, Plus, Search, Sparkles, Utensils } from "lucide-react-native";
+import { Bot, Camera, Coffee, Cookie, Moon, Plus, Search, Sparkles, UtensilsCrossed } from "lucide-react-native";
+import type { LucideProps } from "lucide-react-native";
+import type { ComponentType } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { MacroTotals, Meal } from "@fitfamily-ai/shared";
@@ -168,15 +170,25 @@ export default function MealsScreen() {
   );
 }
 
+// Identidad visual por momento del día: icono y color propios.
+const mealTypeVisuals: Record<string, { icon: ComponentType<LucideProps>; tint: string }> = {
+  breakfast: { icon: Coffee, tint: "#f59e0b" },
+  lunch: { icon: UtensilsCrossed, tint: "#10b981" },
+  dinner: { icon: Moon, tint: "#8b5cf6" },
+  snack: { icon: Cookie, tint: "#f43f5e" },
+};
+
 function MealBucketCard({ bucket }: { bucket: MealBucket }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const totals = sumMeals(bucket.meals);
+  const visual = mealTypeVisuals[bucket.type] ?? { icon: UtensilsCrossed, tint: colors.primary };
+  const MealIcon = visual.icon;
   return (
     <View style={styles.bucketCard}>
       <View style={styles.bucketHeader}>
-        <View style={styles.mealIcon}>
-          <Utensils size={17} color={colors.energy} />
+        <View style={[styles.mealIcon, { backgroundColor: `${visual.tint}1f` }]}>
+          <MealIcon size={17} color={visual.tint} />
         </View>
         <View style={styles.bucketTitleCol}>
           <Text style={styles.bucketTitle}>{bucket.label}</Text>
@@ -307,12 +319,11 @@ function makeStyles(colors: ColorPalette) {
     },
     bucketHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
     mealIcon: {
-      width: 38,
-      height: 38,
-      borderRadius: radius.sm,
+      width: 40,
+      height: 40,
+      borderRadius: 13,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: colors.energySoft,
     },
     bucketTitleCol: { flex: 1, gap: 2 },
     bucketTitle: { color: colors.text, fontWeight: "900", fontSize: 15 },

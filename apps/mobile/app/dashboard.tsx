@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from "expo-router";
-import { Camera, Dumbbell, Ruler, Settings, Watch } from "lucide-react-native";
+import { Beef, Camera, Dumbbell, Flame, Ruler, Scale, Settings, Utensils, Watch } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import { ImageBackground, Pressable, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -79,16 +79,21 @@ export default function DashboardScreen() {
       {loading ? <LoadingState /> : null}
       {dashboard ? (
         <View style={styles.statsGrid}>
-          <Stat label="Entrenos 7d" value={String(dashboard.workoutsLast7Days)} />
-          <Stat label="Comidas 7d" value={String(dashboard.mealsLast7Days)} />
-          <Stat label="Kcal prom." value={dashboard.averageCalories?.toString() ?? "s/d"} />
-          <Stat label="Prote prom." value={dashboard.averageProteinG ? `${dashboard.averageProteinG}g` : "s/d"} />
+          <Stat icon={Dumbbell} tint={colors.primary} label="Entrenos 7d" value={String(dashboard.workoutsLast7Days)} />
+          <Stat icon={Utensils} tint={colors.energy} label="Comidas 7d" value={String(dashboard.mealsLast7Days)} />
+          <Stat icon={Flame} tint={colors.accent} label="Kcal/día" value={dashboard.averageCalories?.toString() ?? "s/d"} />
+          <Stat icon={Beef} tint={colors.success} label="Proteína/día" value={dashboard.averageProteinG ? `${dashboard.averageProteinG}g` : "s/d"} />
         </View>
       ) : null}
       {dashboard?.latestWeightKg ? (
-        <Card>
-          <Text style={styles.cardTitle}>Último peso</Text>
-          <BodyText>{dashboard.latestWeightKg} kg</BodyText>
+        <Card style={styles.weightCard}>
+          <View style={styles.weightIcon}>
+            <Scale size={19} color={colors.primary} />
+          </View>
+          <View style={styles.weightText}>
+            <Text style={styles.cardTitle}>Último peso</Text>
+            <BodyText style={styles.weightValue}>{dashboard.latestWeightKg} kg</BodyText>
+          </View>
         </Card>
       ) : null}
       {dashboard?.alerts.length ? (
@@ -125,11 +130,24 @@ export default function DashboardScreen() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  icon: Icon,
+  tint,
+  label,
+  value,
+}: {
+  icon: typeof Dumbbell;
+  tint: string;
+  label: string;
+  value: string;
+}) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Card style={styles.stat}>
+      <View style={[styles.statIcon, { backgroundColor: `${tint}1f` }]}>
+        <Icon size={17} color={tint} />
+      </View>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </Card>
@@ -241,16 +259,48 @@ function makeStyles(colors: ColorPalette) {
     },
     stat: {
       width: "47%",
+      gap: 4,
+    },
+    statIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 11,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 4,
     },
     statValue: {
-      color: colors.energy,
-      fontSize: 26,
+      color: colors.text,
+      fontSize: 25,
       fontWeight: "900",
+      letterSpacing: -0.8,
     },
     statLabel: {
       color: colors.muted,
       fontSize: 12,
       fontWeight: "700",
+    },
+    weightCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    weightIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 13,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.primarySoft,
+    },
+    weightText: {
+      flex: 1,
+      gap: 1,
+    },
+    weightValue: {
+      fontSize: 21,
+      fontWeight: "900",
+      letterSpacing: -0.5,
     },
     cardTitle: {
       color: colors.text,

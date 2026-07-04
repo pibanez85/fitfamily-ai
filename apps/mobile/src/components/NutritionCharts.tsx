@@ -12,9 +12,9 @@ type MacroDonutProps = {
 };
 
 const macroColors = {
-  protein: "#2dd4bf",
-  carbs: "#facc15",
-  fat: "#f43f5e",
+  protein: "#3ee6c4",
+  carbs: "#fbbf24",
+  fat: "#fb7185",
 };
 
 export function MacroDonut({ totals, size = 152 }: MacroDonutProps) {
@@ -164,8 +164,8 @@ function makeStyles(colors: ColorPalette) {
       alignItems: "center",
       justifyContent: "center",
     },
-    donutValue: { color: colors.text, fontSize: 24, fontWeight: "900" },
-    donutLabel: { color: colors.muted, fontSize: 12, fontWeight: "800" },
+    donutValue: { color: colors.text, fontSize: 26, fontWeight: "900", letterSpacing: -0.8 },
+    donutLabel: { color: colors.muted, fontSize: 11.5, fontWeight: "800", letterSpacing: 0.6 },
     legend: { flex: 1, gap: 9 },
     legendRow: { flexDirection: "row", alignItems: "center", gap: 8 },
     dot: { width: 10, height: 10, borderRadius: 5 },

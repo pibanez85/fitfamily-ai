@@ -2,6 +2,15 @@ import { router, useFocusEffect } from "expo-router";
 import { Check, Plus, UserRoundCheck } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+
+// Cada miembro de la familia recibe un degradado propio para su avatar.
+const avatarGradients: Array<[string, string]> = [
+  ["#34d399", "#22d3ee"],
+  ["#f59e0b", "#fb7185"],
+  ["#8b5cf6", "#6366f1"],
+  ["#f43f5e", "#fb923c"],
+];
 import { AppButton } from "@/components/AppButton";
 import { Card } from "@/components/Card";
 import { Screen } from "@/components/Screen";
@@ -55,9 +64,10 @@ export default function ProfilesScreen() {
       {!loading && profiles.length === 0 ? (
         <EmptyState title="Sin perfiles" body="Crea el primer perfil familiar para comenzar." />
       ) : null}
-      {profiles.map((profile) => {
+      {profiles.map((profile, index) => {
         const selected = profile.id === activeProfileId;
         const initial = profile.displayName.trim().slice(0, 1).toUpperCase();
+        const gradient = avatarGradients[index % avatarGradients.length]!;
         return (
           <Pressable
             key={profile.id}
@@ -68,9 +78,14 @@ export default function ProfilesScreen() {
           >
             <Card style={[styles.profileCard, selected ? styles.selected : null]}>
               <View style={styles.profileRow}>
-                <View style={[styles.avatar, selected ? styles.avatarSelected : null]}>
+                <LinearGradient
+                  colors={gradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.avatar}
+                >
                   <Text style={styles.avatarText}>{initial}</Text>
-                </View>
+                </LinearGradient>
                 <View style={styles.profileText}>
                   <Text style={styles.name}>{profile.displayName}</Text>
                   <Text style={styles.meta}>{profile.goal ?? "Sin objetivo definido"}</Text>
@@ -111,22 +126,20 @@ function makeStyles(colors: ColorPalette) {
     flex: 1,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 50,
+    height: 50,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surfaceStrong,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  avatarSelected: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
+    shadowColor: colors.shadow,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
   avatarText: {
-    color: colors.text,
-    fontSize: 18,
+    color: "#ffffff",
+    fontSize: 19,
     fontWeight: "900",
   },
   check: {

@@ -269,6 +269,11 @@ function makeStyles(colors: ColorPalette) {
   selectedDay: {
     borderRadius: radius.pill,
     backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   dayText: {
     color: colors.text,

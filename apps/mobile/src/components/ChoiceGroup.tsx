@@ -22,6 +22,9 @@ type ChoiceGroupProps<T extends FieldValues> = {
 export function ChoiceGroup<T extends FieldValues>({ control, name, label, options }: ChoiceGroupProps<T>) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  // Sin descripciones: chips compactos. Con descripciones: tarjetas apiladas.
+  const compact = options.every((option) => !option.description);
+
   return (
     <Controller
       control={control}
@@ -29,9 +32,23 @@ export function ChoiceGroup<T extends FieldValues>({ control, name, label, optio
       render={({ field: { onChange, value }, fieldState: { error } }) => (
         <View style={styles.group}>
           <Text style={styles.label}>{label}</Text>
-          <View style={styles.options}>
+          <View style={compact ? styles.chipRow : styles.options}>
             {options.map((option) => {
               const selected = value === option.value;
+              if (compact) {
+                return (
+                  <Pressable
+                    key={option.value}
+                    accessibilityRole="button"
+                    onPress={() => onChange(option.value)}
+                    style={[styles.chip, selected ? styles.chipSelected : null]}
+                  >
+                    <Text style={[styles.chipLabel, selected ? styles.chipLabelSelected : null]}>
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              }
               return (
                 <Pressable
                   key={option.value}
@@ -63,20 +80,52 @@ function makeStyles(colors: ColorPalette) {
       gap: 8,
     },
     label: {
-      color: colors.text,
-      fontSize: 13,
+      color: colors.muted,
+      fontSize: 12.5,
       fontWeight: "800",
+      letterSpacing: 0.3,
+    },
+    chipRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    chip: {
+      minHeight: 42,
+      justifyContent: "center",
+      borderRadius: radius.pill,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceMuted,
+      paddingHorizontal: 16,
+      paddingVertical: 9,
+    },
+    chipSelected: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primarySoft,
+      shadowColor: colors.primary,
+      shadowOpacity: 0.2,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 2 },
+    },
+    chipLabel: {
+      color: colors.muted,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+    chipLabelSelected: {
+      color: colors.primary,
     },
     options: {
       gap: 8,
     },
     option: {
       minHeight: 54,
-      borderRadius: radius.sm,
-      borderWidth: 1,
+      borderRadius: radius.sm + 2,
+      borderWidth: 1.5,
       borderColor: colors.border,
-      backgroundColor: colors.backgroundElevated,
-      paddingHorizontal: 12,
+      backgroundColor: colors.surfaceMuted,
+      paddingHorizontal: 14,
       paddingVertical: 10,
       flexDirection: "row",
       alignItems: "center",
