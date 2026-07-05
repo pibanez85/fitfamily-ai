@@ -8,8 +8,10 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "backgroundColor": "#f8fafc",
+    "icon": "./assets/icon.png",
     "splash": {
-      "backgroundColor": "#0f766e",
+      "image": "./assets/splash-icon.png",
+      "backgroundColor": "#070b14",
       "resizeMode": "contain"
     },
     "assetBundlePatterns": [
@@ -29,8 +31,13 @@
     },
     "android": {
       "package": "com.fitfamilyai.mobile",
-      "versionCode": 3,
+      "versionCode": 4,
       "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundImage": "./assets/adaptive-icon-bg.png",
+        "backgroundColor": "#0d9c84"
+      },
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.health.READ_STEPS",
