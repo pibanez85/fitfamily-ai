@@ -1,24 +1,20 @@
 import React from "react";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import {
   Bot,
   ChevronRight,
+  Dumbbell,
   Flame,
   MessageSquare,
+  Scale,
   Sparkles,
   TrendingDown,
   TrendingUp,
   Trophy,
   Zap,
 } from "lucide-react-native";
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Animated,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, {
   Circle,
   Defs,
@@ -30,99 +26,114 @@ import Svg, {
   Stop,
   Text as SvgText,
 } from "react-native-svg";
+import type { BodyMetric, Meal } from "@fitfamily-ai/shared";
+import { AppButton } from "@/components/AppButton";
 import { Card } from "@/components/Card";
 import { Screen } from "@/components/Screen";
+import { EmptyState, LoadingState } from "@/components/StateViews";
+import { useActiveProfileId } from "@/lib/activeProfile";
+import { api } from "@/services/api";
+import { useAppStore } from "@/store/appStore";
+import {
+  buildExerciseProgress,
+  logVolume,
+  type WorkoutLogDetail,
+} from "@/utils/workoutAnalytics";
+import { computeNutritionGoals, type NutritionGoals } from "@/utils/nutritionGoals";
 import type { ColorPalette } from "@/theme/colors";
 import { radius } from "@/theme/colors";
 import { useTheme } from "@/theme/theme";
 
-// ─── Mock data ───────────────────────────────────────────────────────────────
-
-const WORKOUT_LOGS = [
-  { date: "03 May", label: "L", name: "Pecho & Tríceps", duration: 55, volume: 12400, calories: 320 },
-  { date: "05 May", label: "X", name: "Espalda & Bíceps", duration: 62, volume: 15200, calories: 380 },
-  { date: "07 May", label: "V", name: "Piernas", duration: 70, volume: 22000, calories: 450 },
-  { date: "10 May", label: "L", name: "Hombros", duration: 48, volume: 9800, calories: 290 },
-  { date: "12 May", label: "X", name: "Pecho & Tríceps", duration: 58, volume: 13100, calories: 340 },
-  { date: "14 May", label: "V", name: "Espalda & Bíceps", duration: 65, volume: 16400, calories: 395 },
-  { date: "17 May", label: "L", name: "Piernas", duration: 72, volume: 23500, calories: 465 },
-  { date: "19 May", label: "X", name: "Hombros", duration: 50, volume: 10200, calories: 300 },
-  { date: "21 May", label: "V", name: "Pecho & Tríceps", duration: 60, volume: 13800, calories: 355 },
-  { date: "24 May", label: "L", name: "Espalda & Bíceps", duration: 68, volume: 17200, calories: 410 },
-  { date: "26 May", label: "X", name: "Piernas", duration: 75, volume: 24800, calories: 480 },
-  { date: "28 May", label: "V", name: "Hombros", duration: 52, volume: 10800, calories: 310 },
-];
-
-const NUTRITION_DAYS = [
-  { date: "24 May", day: "L", calories: 2340, protein: 178, carbs: 245, fat: 68, workout: true },
-  { date: "25 May", day: "M", calories: 2180, protein: 162, carbs: 220, fat: 72, workout: false },
-  { date: "26 May", day: "X", calories: 2520, protein: 190, carbs: 270, fat: 70, workout: true },
-  { date: "27 May", day: "J", calories: 2100, protein: 158, carbs: 210, fat: 65, workout: false },
-  { date: "28 May", day: "V", calories: 2450, protein: 185, carbs: 255, fat: 71, workout: true },
-  { date: "29 May", day: "S", calories: 2200, protein: 168, carbs: 230, fat: 68, workout: false },
-  { date: "30 May", day: "D", calories: 2310, protein: 174, carbs: 240, fat: 69, workout: false },
-];
-
-const BODY_METRICS = [
-  { date: "1 Abr", weight: 82.5, fat: 18.2 },
-  { date: "15 Abr", weight: 81.8, fat: 17.8 },
-  { date: "1 May", weight: 81.0, fat: 17.3 },
-  { date: "15 May", weight: 80.2, fat: 16.9 },
-  { date: "28 May", weight: 79.6, fat: 16.5 },
-];
-
-const PERSONAL_RECORDS = [
-  { exercise: "Press Banca", kg: 100, date: "21 May", delta: "+5 kg", up: true },
-  { exercise: "Sentadilla", kg: 130, date: "26 May", delta: "+7.5 kg", up: true },
-  { exercise: "Peso Muerto", kg: 150, date: "24 May", delta: "+5 kg", up: true },
-  { exercise: "Press Militar", kg: 72.5, date: "28 May", delta: "+2.5 kg", up: true },
-];
-
-const AI_ANALYSIS = `Tu progreso en las últimas 4 semanas es excelente. Completaste 12 sesiones (3/semana), con un aumento del 8% en volumen total. Punto fuerte: piernas (+12% en volumen).
-
-Nutrición: promedio 2,300 kcal/día con 174g proteína. Detecto que en días de entreno alcanzas ~188g — muy buena correlación. Oportunidad: los días de descanso (mar, jue) las calorías bajan a ~2,100, lo que puede limitar la recuperación muscular.
-
-Recomendación concreta: añade 200–300 kcal en días de descanso priorizando carbohidratos complejos (arroz, avena, batata). Tu peso bajó 2.9 kg en 8 semanas manteniendo masa — ratio de pérdida grasa ideal.`;
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const LAST_7 = WORKOUT_LOGS.slice(-7);
-const MAX_VOL = Math.max(...LAST_7.map((d) => d.volume));
-
-const avgCalories = Math.round(NUTRITION_DAYS.reduce((s, d) => s + d.calories, 0) / NUTRITION_DAYS.length);
-const avgProtein = Math.round(NUTRITION_DAYS.reduce((s, d) => s + d.protein, 0) / NUTRITION_DAYS.length);
-const totalSessions = WORKOUT_LOGS.length;
-const latestWeight = BODY_METRICS[BODY_METRICS.length - 1]!.weight;
-const firstWeight = BODY_METRICS[0]!.weight;
-const weightDelta = (latestWeight - firstWeight).toFixed(1);
-
-// ─── Main screen ─────────────────────────────────────────────────────────────
+// ─── Tipos y periodo ─────────────────────────────────────────────────────────
 
 type Period = "7d" | "30d" | "90d";
+
+const PERIOD_DAYS: Record<Period, number> = { "7d": 7, "30d": 30, "90d": 90 };
+const PERIOD_LABEL: Record<Period, string> = {
+  "7d": "últimos 7 días",
+  "30d": "últimos 30 días",
+  "90d": "últimos 90 días",
+};
+
+const WEEKDAY_LETTERS = ["D", "L", "M", "X", "J", "V", "S"];
+
+type VolumeBar = { label: string; value: number };
+type NutritionDay = { day: string; calories: number; protein: number; workout: boolean };
+type WeightPoint = { label: string; weight: number; fat: number | null };
+type PersonalRecord = { exercise: string; kg: number; date: string; deltaKg: number };
+
+type ProgressData = {
+  sessions: number;
+  sessionsPrev: number;
+  avgCalories: number | null;
+  avgProtein: number | null;
+  latestWeight: number | null;
+  latestFat: number | null;
+  weightDelta: number | null;
+  volumeBars: VolumeBar[];
+  volumeTrendPct: number | null;
+  nutritionWeek: NutritionDay[];
+  cross: { workoutCal: number; restCal: number; workoutProt: number; restProt: number } | null;
+  weightPoints: WeightPoint[];
+  personalRecords: PersonalRecord[];
+  hasAnyData: boolean;
+};
+
+// ─── Pantalla ────────────────────────────────────────────────────────────────
 
 export default function ProgressScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const profileId = useActiveProfileId();
+  const profile = useAppStore((state) =>
+    state.profiles.find((entry) => entry.id === state.activeProfileId) ?? null,
+  );
   const [period, setPeriod] = useState<Period>("30d");
-  const [aiLoading, setAiLoading] = useState(true);
-  const [aiText, setAiText] = useState("");
-  const pulseAnim = useRef(new Animated.Value(0.4)).current;
+  const [logs, setLogs] = useState<WorkoutLogDetail[]>([]);
+  const [meals, setMeals] = useState<Meal[]>([]);
+  const [metrics, setMetrics] = useState<BodyMetric[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 0.4, duration: 800, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    const t = setTimeout(() => {
-      loop.stop();
-      setAiLoading(false);
-      setAiText(AI_ANALYSIS);
-    }, 1800);
-    return () => clearTimeout(t);
-  }, [pulseAnim]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!profileId) return;
+      let alive = true;
+      setLoading(true);
+      setError(null);
+      Promise.all([
+        api.workouts.logs(profileId),
+        api.meals.list(profileId),
+        api.bodyMetrics.list(profileId),
+      ])
+        .then(([logsData, mealsData, metricsData]) => {
+          if (!alive) return;
+          setLogs(logsData as WorkoutLogDetail[]);
+          setMeals(mealsData);
+          setMetrics(metricsData);
+        })
+        .catch((caught) => {
+          if (alive) setError(caught instanceof Error ? caught.message : "No pude cargar tu progreso.");
+        })
+        .finally(() => {
+          if (alive) setLoading(false);
+        });
+      return () => {
+        alive = false;
+      };
+    }, [profileId]),
+  );
+
+  const data = useMemo(() => buildProgressData(logs, meals, metrics, period), [logs, meals, metrics, period]);
+  const goals = useMemo(() => computeNutritionGoals(profile, data.latestWeight), [profile, data.latestWeight]);
+  const summary = useMemo(() => buildSummaryText(data, goals, period), [data, goals, period]);
+
+  const sessionsSub =
+    data.sessionsPrev === data.sessions
+      ? "igual que antes"
+      : data.sessions > data.sessionsPrev
+        ? `+${data.sessions - data.sessionsPrev} vs periodo ant.`
+        : `${data.sessions - data.sessionsPrev} vs periodo ant.`;
 
   return (
     <Screen>
@@ -130,142 +141,426 @@ export default function ProgressScreen() {
       <View style={styles.headerRow}>
         <View>
           <Text style={styles.screenTitle}>Avances</Text>
-          <Text style={styles.screenSub}>Progreso cruzado entreno & nutrición</Text>
+          <Text style={styles.screenSub}>Tu entreno y nutrición, con datos reales</Text>
         </View>
         <View style={styles.periodRow}>
-          {(["7d", "30d", "90d"] as Period[]).map((p) => (
+          {(["7d", "30d", "90d"] as Period[]).map((option) => (
             <Pressable
-              key={p}
-              onPress={() => setPeriod(p)}
-              style={[styles.periodBtn, period === p && styles.periodBtnActive]}
+              key={option}
+              onPress={() => setPeriod(option)}
+              style={[styles.periodBtn, period === option && styles.periodBtnActive]}
             >
-              <Text style={[styles.periodLabel, period === p && styles.periodLabelActive]}>{p}</Text>
+              <Text style={[styles.periodLabel, period === option && styles.periodLabelActive]}>{option}</Text>
             </Pressable>
           ))}
         </View>
       </View>
 
-      {/* ── KPI row ── */}
-      <View style={styles.kpiRow}>
-        <KpiCard icon={Zap} label="Sesiones" value={String(totalSessions)} sub="+3 vs mes ant." color={colors.primary} colors={colors} />
-        <KpiCard icon={Flame} label="Kcal prom." value={String(avgCalories)} sub={`${avgProtein}g prot.`} color={colors.energy} colors={colors} />
-        <KpiCard icon={TrendingDown} label="Peso" value={`${latestWeight} kg`} sub={`${weightDelta} kg`} color={colors.success} colors={colors} />
-      </View>
+      {loading ? <LoadingState label="Cargando tu progreso..." /> : null}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      {/* ── AI Insight ── */}
-      <Card style={styles.aiCard}>
-        <View style={styles.aiHeader}>
-          <View style={styles.aiTitleRow}>
-            <Sparkles size={16} color={colors.energy} />
-            <Text style={styles.aiTitle}>Análisis IA</Text>
+      {!loading && !error && !data.hasAnyData ? (
+        <Card>
+          <EmptyState
+            title="Aún no hay datos de progreso"
+            body="Registra tu primer entrenamiento, una comida o tu peso y esta pantalla se irá llenando con tus avances reales."
+          />
+          <AppButton
+            label="Registrar mi primer entreno"
+            icon={Dumbbell}
+            onPress={() => router.push("/workouts/log")}
+          />
+          <AppButton
+            label="Registrar mi peso"
+            icon={Scale}
+            variant="secondary"
+            onPress={() => router.push("/body-metrics")}
+          />
+        </Card>
+      ) : null}
+
+      {!loading && !error && data.hasAnyData ? (
+        <>
+          {/* ── KPIs ── */}
+          <View style={styles.kpiRow}>
+            <KpiCard
+              icon={Zap}
+              label="Sesiones"
+              value={String(data.sessions)}
+              sub={sessionsSub}
+              subPositive={data.sessions >= data.sessionsPrev}
+              color={colors.primary}
+              colors={colors}
+            />
+            <KpiCard
+              icon={Flame}
+              label="Kcal/día"
+              value={data.avgCalories != null ? String(data.avgCalories) : "-"}
+              sub={data.avgProtein != null ? `${data.avgProtein}g prot.` : "sin comidas"}
+              subPositive
+              color={colors.energy}
+              colors={colors}
+            />
+            <KpiCard
+              icon={data.weightDelta != null && data.weightDelta > 0 ? TrendingUp : TrendingDown}
+              label="Peso"
+              value={data.latestWeight != null ? `${data.latestWeight} kg` : "-"}
+              sub={
+                data.weightDelta != null
+                  ? `${data.weightDelta > 0 ? "+" : ""}${data.weightDelta.toFixed(1)} kg`
+                  : "sin registros"
+              }
+              subPositive
+              color={colors.success}
+              colors={colors}
+            />
           </View>
-          <Text style={styles.aiDate}>Generado hoy</Text>
-        </View>
-        {aiLoading ? (
-          <View style={styles.aiSkeleton}>
-            {[100, 85, 90, 70, 95, 60].map((w, i) => (
-              <Animated.View
-                key={i}
-                style={[styles.aiSkeletonLine, { width: `${w}%`, opacity: pulseAnim }]}
+
+          {/* ── Resumen del periodo ── */}
+          <Card style={styles.aiCard}>
+            <View style={styles.aiHeader}>
+              <View style={styles.aiTitleRow}>
+                <Sparkles size={16} color={colors.energy} />
+                <Text style={styles.aiTitle}>Tu resumen</Text>
+              </View>
+              <Text style={styles.aiDate}>{PERIOD_LABEL[period]}</Text>
+            </View>
+            <Text style={styles.aiBody}>{summary}</Text>
+            <Pressable
+              style={styles.aiChatBtn}
+              onPress={() => router.push({ pathname: "/chat", params: { context: "progreso" } })}
+            >
+              <MessageSquare size={15} color={colors.primary} />
+              <Text style={styles.aiChatLabel}>Hacer preguntas al Coach IA</Text>
+              <ChevronRight size={14} color={colors.primary} />
+            </Pressable>
+          </Card>
+
+          {/* ── Volumen por sesión ── */}
+          {data.volumeBars.length > 0 ? (
+            <Card>
+              <Text style={styles.cardTitle}>Volumen por sesión</Text>
+              <Text style={styles.cardSub}>
+                Últimas {data.volumeBars.length} sesiones (kg totales levantados)
+              </Text>
+              <VolumeBarChart data={data.volumeBars} colors={colors} />
+            </Card>
+          ) : (
+            <Card>
+              <Text style={styles.cardTitle}>Volumen por sesión</Text>
+              <Text style={styles.hintText}>
+                Cuando registres entrenamientos con peso y repeticiones, acá verás cuánto levantas por sesión.
+              </Text>
+            </Card>
+          )}
+
+          {/* ── Nutrición esta semana ── */}
+          {data.nutritionWeek.some((day) => day.calories > 0) ? (
+            <Card>
+              <Text style={styles.cardTitle}>Nutrición esta semana</Text>
+              <Text style={styles.cardSub}>Días de entreno destacados. Cada línea usa su propia escala.</Text>
+              <NutritionChart data={data.nutritionWeek} colors={colors} />
+              <View style={styles.legendRow}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: colors.energy }]} />
+                  <Text style={styles.legendText}>Calorías (kcal)</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
+                  <Text style={styles.legendText}>Proteína (g)</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: colors.accent }]} />
+                  <Text style={styles.legendText}>Día entreno</Text>
+                </View>
+              </View>
+            </Card>
+          ) : null}
+
+          {/* ── Entreno vs nutrición ── */}
+          {data.cross ? (
+            <Card>
+              <Text style={styles.cardTitle}>Entreno vs Nutrición</Text>
+              <Text style={styles.cardSub}>Promedio diario en días con y sin entrenamiento</Text>
+              <CrossRefTable cross={data.cross} colors={colors} />
+            </Card>
+          ) : null}
+
+          {/* ── Composición corporal ── */}
+          {data.weightPoints.length >= 2 ? (
+            <Card>
+              <Text style={styles.cardTitle}>Peso corporal</Text>
+              <Text style={styles.cardSub}>Tus últimos registros</Text>
+              <WeightChart data={data.weightPoints} colors={colors} />
+              <View style={styles.bodyStatRow}>
+                <BodyStat
+                  label="Primer registro"
+                  value={`${data.weightPoints[0]!.weight} kg`}
+                  colors={colors}
+                />
+                <BodyStat
+                  label="Peso actual"
+                  value={`${data.weightPoints[data.weightPoints.length - 1]!.weight} kg`}
+                  highlight
+                  colors={colors}
+                />
+                {data.latestFat != null ? (
+                  <BodyStat label="Grasa corporal" value={`${data.latestFat}%`} colors={colors} />
+                ) : null}
+              </View>
+            </Card>
+          ) : (
+            <Card>
+              <Text style={styles.cardTitle}>Peso corporal</Text>
+              <Text style={styles.hintText}>
+                Registra tu peso al menos una vez por semana para ver tu tendencia acá.
+              </Text>
+              <AppButton
+                label="Registrar peso y medidas"
+                icon={Scale}
+                variant="secondary"
+                onPress={() => router.push("/body-metrics")}
               />
-            ))}
-          </View>
-        ) : (
-          <Text style={styles.aiBody}>{aiText}</Text>
-        )}
-        <Pressable
-          style={styles.aiChatBtn}
-          onPress={() =>
-            router.push({
-              pathname: "/chat",
-              params: { context: "progreso" },
-            })
-          }
-        >
-          <MessageSquare size={15} color={colors.primary} />
-          <Text style={styles.aiChatLabel}>Hacer preguntas al Coach IA</Text>
-          <ChevronRight size={14} color={colors.primary} />
-        </Pressable>
-      </Card>
+            </Card>
+          )}
 
-      {/* ── Workout volume chart ── */}
-      <Card>
-        <Text style={styles.cardTitle}>Volumen por sesión</Text>
-        <Text style={styles.cardSub}>Últimas 7 sesiones (kg totales)</Text>
-        <VolumeBarChart data={LAST_7} maxVal={MAX_VOL} colors={colors} />
-      </Card>
+          {/* ── Récords personales ── */}
+          {data.personalRecords.length > 0 ? (
+            <Card>
+              <View style={styles.cardHeaderRow}>
+                <Trophy size={16} color={colors.energy} />
+                <Text style={styles.cardTitle}>Récords personales</Text>
+              </View>
+              <Text style={styles.cardSub}>Tu mejor peso levantado por ejercicio en el periodo</Text>
+              {data.personalRecords.map((record) => (
+                <PRRow key={record.exercise} record={record} colors={colors} />
+              ))}
+            </Card>
+          ) : null}
 
-      {/* ── Nutrition vs training ── */}
-      <Card>
-        <Text style={styles.cardTitle}>Nutrición esta semana</Text>
-        <Text style={styles.cardSub}>Calorías y proteína — días de entreno destacados</Text>
-        <NutritionChart data={NUTRITION_DAYS} colors={colors} />
-        <View style={styles.legendRow}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: colors.energy }]} />
-            <Text style={styles.legendText}>Calorías ÷ 15</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
-            <Text style={styles.legendText}>Proteína (g)</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: colors.accent }]} />
-            <Text style={styles.legendText}>Día entreno</Text>
-          </View>
-        </View>
-      </Card>
-
-      {/* ── Cross-reference table ── */}
-      <Card>
-        <Text style={styles.cardTitle}>Entreno vs Nutrición</Text>
-        <Text style={styles.cardSub}>Correlación calorías y proteína según actividad</Text>
-        <CrossRefTable data={NUTRITION_DAYS} colors={colors} />
-      </Card>
-
-      {/* ── Body composition ── */}
-      <Card>
-        <Text style={styles.cardTitle}>Composición corporal</Text>
-        <Text style={styles.cardSub}>Peso y % grasa — últimas 8 semanas</Text>
-        <WeightChart data={BODY_METRICS} colors={colors} />
-        <View style={styles.bodyStatRow}>
-          <BodyStat label="Peso inicial" value={`${firstWeight} kg`} colors={colors} />
-          <BodyStat label="Peso actual" value={`${latestWeight} kg`} highlight colors={colors} />
-          <BodyStat label="Grasa corporal" value={`${BODY_METRICS[BODY_METRICS.length - 1]!.fat}%`} colors={colors} />
-        </View>
-      </Card>
-
-      {/* ── PRs ── */}
-      <Card>
-        <View style={styles.cardHeaderRow}>
-          <Trophy size={16} color={colors.energy} />
-          <Text style={styles.cardTitle}>Récords personales</Text>
-        </View>
-        {PERSONAL_RECORDS.map((pr) => (
-          <PRRow key={pr.exercise} pr={pr} colors={colors} />
-        ))}
-      </Card>
-
-      {/* ── CTA ── */}
-      <Pressable
-        style={styles.coachCta}
-        onPress={() => router.push("/chat")}
-      >
-        <Bot size={20} color={colors.onPrimary} />
-        <Text style={styles.coachCtaLabel}>Hablar con el Coach IA sobre mi progreso</Text>
-        <ChevronRight size={16} color={colors.onPrimary} />
-      </Pressable>
+          {/* ── CTA coach ── */}
+          <Pressable style={styles.coachCta} onPress={() => router.push("/chat")}>
+            <Bot size={20} color={colors.onPrimary} />
+            <Text style={styles.coachCtaLabel}>Hablar con el Coach IA sobre mi progreso</Text>
+            <ChevronRight size={16} color={colors.onPrimary} />
+          </Pressable>
+        </>
+      ) : null}
     </Screen>
   );
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Cálculo de datos reales ─────────────────────────────────────────────────
+
+function dayKey(value: string): string {
+  return new Date(value).toDateString();
+}
+
+function shortDate(value: string): string {
+  return new Date(value).toLocaleDateString("es-CL", { day: "2-digit", month: "short" });
+}
+
+function buildProgressData(
+  logs: WorkoutLogDetail[],
+  meals: Meal[],
+  metrics: BodyMetric[],
+  period: Period,
+): ProgressData {
+  const periodDays = PERIOD_DAYS[period];
+  const cutoff = Date.now() - periodDays * 24 * 60 * 60 * 1000;
+  const prevCutoff = Date.now() - periodDays * 2 * 24 * 60 * 60 * 1000;
+
+  const periodLogs = logs
+    .filter((log) => new Date(log.startedAt).getTime() >= cutoff)
+    .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+  const prevLogs = logs.filter((log) => {
+    const time = new Date(log.startedAt).getTime();
+    return time >= prevCutoff && time < cutoff;
+  });
+
+  // Volumen de las últimas sesiones del periodo.
+  const volumeBars: VolumeBar[] = periodLogs.slice(-7).map((log) => ({
+    label: WEEKDAY_LETTERS[new Date(log.startedAt).getDay()]!,
+    value: logVolume(log),
+  }));
+
+  // Tendencia de volumen: primera mitad vs segunda mitad del periodo.
+  let volumeTrendPct: number | null = null;
+  const volumes = periodLogs.map((log) => logVolume(log)).filter((value) => value > 0);
+  if (volumes.length >= 4) {
+    const half = Math.floor(volumes.length / 2);
+    const firstAvg = volumes.slice(0, half).reduce((a, b) => a + b, 0) / half;
+    const secondAvg = volumes.slice(half).reduce((a, b) => a + b, 0) / (volumes.length - half);
+    if (firstAvg > 0) volumeTrendPct = Math.round(((secondAvg - firstAvg) / firstAvg) * 100);
+  }
+
+  // Comidas del periodo agrupadas por día.
+  const mealsByDay = new Map<string, { calories: number; protein: number }>();
+  for (const meal of meals) {
+    if (new Date(meal.eatenAt).getTime() < cutoff) continue;
+    const key = dayKey(meal.eatenAt);
+    const entry = mealsByDay.get(key) ?? { calories: 0, protein: 0 };
+    entry.calories += meal.calories ?? 0;
+    entry.protein += meal.proteinG ?? 0;
+    mealsByDay.set(key, entry);
+  }
+  const dailyTotals = [...mealsByDay.values()];
+  const avgCalories = dailyTotals.length
+    ? Math.round(dailyTotals.reduce((sum, entry) => sum + entry.calories, 0) / dailyTotals.length)
+    : null;
+  const avgProtein = dailyTotals.length
+    ? Math.round(dailyTotals.reduce((sum, entry) => sum + entry.protein, 0) / dailyTotals.length)
+    : null;
+
+  // Semana calendario (para el gráfico de nutrición).
+  const workoutDayKeys = new Set(logs.map((log) => dayKey(log.startedAt)));
+  const allMealsByDay = new Map<string, { calories: number; protein: number }>();
+  for (const meal of meals) {
+    const key = dayKey(meal.eatenAt);
+    const entry = allMealsByDay.get(key) ?? { calories: 0, protein: 0 };
+    entry.calories += meal.calories ?? 0;
+    entry.protein += meal.proteinG ?? 0;
+    allMealsByDay.set(key, entry);
+  }
+  const nutritionWeek: NutritionDay[] = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - index));
+    const key = date.toDateString();
+    const entry = allMealsByDay.get(key);
+    return {
+      day: WEEKDAY_LETTERS[date.getDay()]!,
+      calories: Math.round(entry?.calories ?? 0),
+      protein: Math.round(entry?.protein ?? 0),
+      workout: workoutDayKeys.has(key),
+    };
+  });
+
+  // Correlación entreno vs descanso (solo días con comidas registradas).
+  const workoutDayTotals: Array<{ calories: number; protein: number }> = [];
+  const restDayTotals: Array<{ calories: number; protein: number }> = [];
+  for (const [key, entry] of mealsByDay) {
+    (workoutDayKeys.has(key) ? workoutDayTotals : restDayTotals).push(entry);
+  }
+  const avgOf = (items: Array<{ calories: number; protein: number }>, field: "calories" | "protein") =>
+    Math.round(items.reduce((sum, item) => sum + item[field], 0) / items.length);
+  const cross =
+    workoutDayTotals.length > 0 && restDayTotals.length > 0
+      ? {
+          workoutCal: avgOf(workoutDayTotals, "calories"),
+          restCal: avgOf(restDayTotals, "calories"),
+          workoutProt: avgOf(workoutDayTotals, "protein"),
+          restProt: avgOf(restDayTotals, "protein"),
+        }
+      : null;
+
+  // Peso corporal: registros del periodo (o los últimos 6 si hay pocos).
+  const sortedMetrics = metrics
+    .filter((metric) => metric.weightKg != null)
+    .sort((a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime());
+  let weightMetrics = sortedMetrics.filter((metric) => new Date(metric.measuredAt).getTime() >= cutoff);
+  if (weightMetrics.length < 2) weightMetrics = sortedMetrics.slice(-6);
+  const weightPoints: WeightPoint[] = weightMetrics.map((metric) => ({
+    label: shortDate(metric.measuredAt),
+    weight: metric.weightKg!,
+    fat: metric.bodyFatPercentage ?? null,
+  }));
+  const latestMetric = sortedMetrics[sortedMetrics.length - 1] ?? null;
+  const latestWeight = latestMetric?.weightKg ?? null;
+  const latestFat = latestMetric?.bodyFatPercentage ?? null;
+  const weightDelta =
+    weightPoints.length >= 2
+      ? Math.round((weightPoints[weightPoints.length - 1]!.weight - weightPoints[0]!.weight) * 10) / 10
+      : null;
+
+  // Récords personales desde las series registradas.
+  const personalRecords: PersonalRecord[] = buildExerciseProgress(periodLogs)
+    .filter((summary) => summary.bestWeight > 0)
+    .sort((a, b) => b.bestWeight - a.bestWeight)
+    .slice(0, 4)
+    .map((summary) => {
+      const bestEntry = [...summary.trend].reverse().find((entry) => entry.weight === summary.bestWeight);
+      return {
+        exercise: summary.exerciseName,
+        kg: summary.bestWeight,
+        date: bestEntry?.label ?? "",
+        deltaKg: Math.round(summary.weightDelta * 10) / 10,
+      };
+    });
+
+  return {
+    sessions: periodLogs.length,
+    sessionsPrev: prevLogs.length,
+    avgCalories,
+    avgProtein,
+    latestWeight,
+    latestFat,
+    weightDelta,
+    volumeBars,
+    volumeTrendPct,
+    nutritionWeek,
+    cross,
+    weightPoints,
+    personalRecords,
+    hasAnyData: logs.length > 0 || meals.length > 0 || metrics.length > 0,
+  };
+}
+
+// Resumen en lenguaje simple, calculado desde los datos (sin IA ni promesas).
+function buildSummaryText(data: ProgressData, goals: NutritionGoals, period: Period): string {
+  const parts: string[] = [];
+  const periodDays = PERIOD_DAYS[period];
+  const perWeek = Math.round((data.sessions / periodDays) * 7 * 10) / 10;
+
+  if (data.sessions === 0) {
+    parts.push(
+      `No registraste entrenamientos en los ${PERIOD_LABEL[period]}. Un buen punto de partida son 2-3 sesiones por semana; tu rutina activa te espera en Entreno.`,
+    );
+  } else {
+    parts.push(
+      `Completaste ${data.sessions} ${data.sessions === 1 ? "sesión" : "sesiones"} en los ${PERIOD_LABEL[period]} (~${perWeek} por semana).${
+        data.sessions >= data.sessionsPrev && data.sessionsPrev > 0 ? " Vas igual o mejor que el periodo anterior — la constancia es lo que más importa." : ""
+      }`,
+    );
+  }
+
+  if (data.volumeTrendPct != null) {
+    if (data.volumeTrendPct > 5) {
+      parts.push(`Tu volumen de entrenamiento va subiendo (+${data.volumeTrendPct}% en el periodo). Señal clara de progreso.`);
+    } else if (data.volumeTrendPct < -5) {
+      parts.push(`Tu volumen bajó ${Math.abs(data.volumeTrendPct)}% en el periodo. Si fue una semana liviana planificada, perfecto; si no, retoma tus pesos habituales.`);
+    } else {
+      parts.push("Tu volumen se mantiene estable. Cuando las últimas repeticiones salgan fáciles, sube un poco el peso.");
+    }
+  }
+
+  if (data.avgProtein != null && data.avgCalories != null) {
+    const proteinRatio = data.avgProtein / goals.proteinG;
+    if (proteinRatio >= 0.9) {
+      parts.push(`Nutrición: promedias ${data.avgCalories} kcal y ${data.avgProtein}g de proteína al día — dentro de tu meta de ${goals.proteinG}g. Bien ahí.`);
+    } else {
+      parts.push(
+        `Nutrición: promedias ${data.avgCalories} kcal y ${data.avgProtein}g de proteína al día, por debajo de tu meta de ${goals.proteinG}g. Suma una fuente magra (pollo, huevo, yogurt proteico) en alguna comida.`,
+      );
+    }
+  }
+
+  if (data.weightDelta != null && Math.abs(data.weightDelta) >= 0.3) {
+    parts.push(
+      `Peso corporal: ${data.weightDelta < 0 ? "bajaste" : "subiste"} ${Math.abs(data.weightDelta).toFixed(1)} kg en el periodo. Los cambios lentos y sostenidos son los que duran.`,
+    );
+  }
+
+  return parts.join("\n\n");
+}
+
+// ─── Sub-componentes ─────────────────────────────────────────────────────────
 
 function KpiCard({
   icon: Icon,
   label,
   value,
   sub,
+  subPositive,
   color,
   colors,
 }: {
@@ -273,6 +568,7 @@ function KpiCard({
   label: string;
   value: string;
   sub: string;
+  subPositive: boolean;
   color: string;
   colors: ColorPalette;
 }) {
@@ -282,26 +578,19 @@ function KpiCard({
       <Icon size={14} color={color} />
       <Text style={styles.kpiValue}>{value}</Text>
       <Text style={styles.kpiLabel}>{label}</Text>
-      <Text style={styles.kpiSub}>{sub}</Text>
+      <Text style={[styles.kpiSub, { color: subPositive ? colors.success : colors.muted }]}>{sub}</Text>
     </View>
   );
 }
 
-function VolumeBarChart({
-  data,
-  maxVal,
-  colors,
-}: {
-  data: typeof LAST_7;
-  maxVal: number;
-  colors: ColorPalette;
-}) {
+function VolumeBarChart({ data, colors }: { data: VolumeBar[]; colors: ColorPalette }) {
   const W = 300;
   const H = 110;
-  const PAD = { left: 8, right: 8, top: 8, bottom: 24 };
+  const PAD = { left: 8, right: 8, top: 14, bottom: 24 };
   const chartW = W - PAD.left - PAD.right;
   const chartH = H - PAD.top - PAD.bottom;
   const barW = chartW / data.length - 5;
+  const maxVal = Math.max(...data.map((bar) => bar.value), 1);
 
   return (
     <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
@@ -311,7 +600,6 @@ function VolumeBarChart({
           <Stop offset="1" stopColor={colors.primaryDark} stopOpacity="0.6" />
         </LinearGradient>
       </Defs>
-      {/* Grid lines */}
       {[0.25, 0.5, 0.75, 1].map((frac) => (
         <Line
           key={frac}
@@ -324,14 +612,14 @@ function VolumeBarChart({
           strokeDasharray="4,4"
         />
       ))}
-      {data.map((d, i) => {
-        const frac = d.volume / maxVal;
+      {data.map((bar, index) => {
+        const frac = bar.value / maxVal;
         const barH = Math.max(4, chartH * frac);
-        const bx = PAD.left + (i * (chartW / data.length)) + 2.5;
+        const bx = PAD.left + index * (chartW / data.length) + 2.5;
         const by = PAD.top + chartH - barH;
-        const isLast = i === data.length - 1;
+        const isLast = index === data.length - 1;
         return (
-          <React.Fragment key={i}>
+          <React.Fragment key={index}>
             <Rect
               x={bx}
               y={by}
@@ -349,20 +637,20 @@ function VolumeBarChart({
               textAnchor="middle"
               fontWeight={isLast ? "bold" : "normal"}
             >
-              {d.label}
+              {bar.label}
             </SvgText>
-            {isLast && (
+            {bar.value > 0 ? (
               <SvgText
                 x={bx + barW / 2}
                 y={by - 3}
-                fontSize={7}
-                fill={colors.primary}
+                fontSize={6.5}
+                fill={isLast ? colors.primary : colors.muted}
                 textAnchor="middle"
-                fontWeight="bold"
+                fontWeight={isLast ? "bold" : "normal"}
               >
-                {Math.round(d.volume / 1000)}k
+                {bar.value >= 1000 ? `${(bar.value / 1000).toFixed(1)}k` : Math.round(bar.value)}
               </SvgText>
-            )}
+            ) : null}
           </React.Fragment>
         );
       })}
@@ -370,13 +658,7 @@ function VolumeBarChart({
   );
 }
 
-function NutritionChart({
-  data,
-  colors,
-}: {
-  data: typeof NUTRITION_DAYS;
-  colors: ColorPalette;
-}) {
+function NutritionChart({ data, colors }: { data: NutritionDay[]; colors: ColorPalette }) {
   const W = 300;
   const H = 110;
   const PAD = { left: 8, right: 8, top: 12, bottom: 24 };
@@ -384,21 +666,15 @@ function NutritionChart({
   const chartH = H - PAD.top - PAD.bottom;
   const step = chartW / (data.length - 1);
 
-  const calMax = Math.max(...data.map((d) => d.calories / 15));
-  const protMax = Math.max(...data.map((d) => d.protein));
-  const maxVal = Math.max(calMax, protMax);
+  // Cada serie se normaliza a su propio maximo para comparar formas.
+  const calMax = Math.max(...data.map((day) => day.calories), 1);
+  const protMax = Math.max(...data.map((day) => day.protein), 1);
 
-  const calPoints = data.map((d, i) => {
-    const x = PAD.left + i * step;
-    const y = PAD.top + chartH - (d.calories / 15 / maxVal) * chartH;
-    return `${x},${y}`;
-  }).join(" ");
+  const calY = (day: NutritionDay) => PAD.top + chartH - (day.calories / calMax) * chartH;
+  const protY = (day: NutritionDay) => PAD.top + chartH - (day.protein / protMax) * chartH;
 
-  const protPoints = data.map((d, i) => {
-    const x = PAD.left + i * step;
-    const y = PAD.top + chartH - (d.protein / maxVal) * chartH;
-    return `${x},${y}`;
-  }).join(" ");
+  const calPoints = data.map((day, index) => `${PAD.left + index * step},${calY(day)}`).join(" ");
+  const protPoints = data.map((day, index) => `${PAD.left + index * step},${protY(day)}`).join(" ");
 
   return (
     <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
@@ -408,13 +684,12 @@ function NutritionChart({
           <Stop offset="1" stopColor={colors.energy} stopOpacity="0" />
         </LinearGradient>
       </Defs>
-      {/* Workout day highlight columns */}
-      {data.map((d, i) => {
-        if (!d.workout) return null;
-        const x = PAD.left + i * step - step * 0.4;
+      {data.map((day, index) => {
+        if (!day.workout) return null;
+        const x = PAD.left + index * step - step * 0.4;
         return (
           <Rect
-            key={i}
+            key={index}
             x={x}
             y={PAD.top}
             width={step * 0.8}
@@ -425,25 +700,24 @@ function NutritionChart({
           />
         );
       })}
-      {/* Grid */}
-      {[0.5, 1].map((f) => (
+      {[0.5, 1].map((frac) => (
         <Line
-          key={f}
+          key={frac}
           x1={PAD.left}
-          y1={PAD.top + chartH * (1 - f)}
+          y1={PAD.top + chartH * (1 - frac)}
           x2={W - PAD.right}
-          y2={PAD.top + chartH * (1 - f)}
+          y2={PAD.top + chartH * (1 - frac)}
           stroke={colors.border}
           strokeWidth={0.6}
           strokeDasharray="4,3"
         />
       ))}
-      {/* Calorie fill area */}
       <Path
-        d={`M${PAD.left},${PAD.top + chartH} ${data.map((d, i) => `L${PAD.left + i * step},${PAD.top + chartH - (d.calories / 15 / maxVal) * chartH}`).join(" ")} L${PAD.left + (data.length - 1) * step},${PAD.top + chartH} Z`}
+        d={`M${PAD.left},${PAD.top + chartH} ${data
+          .map((day, index) => `L${PAD.left + index * step},${calY(day)}`)
+          .join(" ")} L${PAD.left + (data.length - 1) * step},${PAD.top + chartH} Z`}
         fill="url(#calFill)"
       />
-      {/* Calorie line */}
       <Polyline
         points={calPoints}
         fill="none"
@@ -452,7 +726,6 @@ function NutritionChart({
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {/* Protein line */}
       <Polyline
         points={protPoints}
         fill="none"
@@ -462,66 +735,56 @@ function NutritionChart({
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {/* X labels */}
-      {data.map((d, i) => (
+      {data.map((day, index) => (
         <SvgText
-          key={i}
-          x={PAD.left + i * step}
+          key={index}
+          x={PAD.left + index * step}
           y={H - 4}
           fontSize={8}
-          fill={d.workout ? colors.accent : colors.muted}
+          fill={day.workout ? colors.accent : colors.muted}
           textAnchor="middle"
-          fontWeight={d.workout ? "bold" : "normal"}
+          fontWeight={day.workout ? "bold" : "normal"}
         >
-          {d.day}
+          {day.day}
         </SvgText>
       ))}
-      {/* Dots on calories */}
-      {data.map((d, i) => {
-        const x = PAD.left + i * step;
-        const y = PAD.top + chartH - (d.calories / 15 / maxVal) * chartH;
-        return (
-          <Circle
-            key={i}
-            cx={x}
-            cy={y}
-            r={d.workout ? 3.5 : 2.5}
-            fill={d.workout ? colors.accent : colors.energy}
-            stroke={colors.background}
-            strokeWidth={1}
-          />
-        );
-      })}
+      {data.map((day, index) => (
+        <Circle
+          key={index}
+          cx={PAD.left + index * step}
+          cy={calY(day)}
+          r={day.workout ? 3.5 : 2.5}
+          fill={day.workout ? colors.accent : colors.energy}
+          stroke={colors.background}
+          strokeWidth={1}
+        />
+      ))}
     </Svg>
   );
 }
 
-function WeightChart({
-  data,
-  colors,
-}: {
-  data: typeof BODY_METRICS;
-  colors: ColorPalette;
-}) {
+function WeightChart({ data, colors }: { data: WeightPoint[]; colors: ColorPalette }) {
   const W = 300;
   const H = 90;
   const PAD = { left: 32, right: 12, top: 10, bottom: 24 };
   const chartW = W - PAD.left - PAD.right;
   const chartH = H - PAD.top - PAD.bottom;
   const step = chartW / (data.length - 1);
-  const minW = Math.min(...data.map((d) => d.weight)) - 0.5;
-  const maxW = Math.max(...data.map((d) => d.weight)) + 0.5;
+  const minW = Math.min(...data.map((point) => point.weight)) - 0.5;
+  const maxW = Math.max(...data.map((point) => point.weight)) + 0.5;
   const range = maxW - minW;
 
-  const points = data.map((d, i) => {
-    const x = PAD.left + i * step;
-    const y = PAD.top + chartH - ((d.weight - minW) / range) * chartH;
-    return { x, y, ...d };
-  });
+  const points = data.map((point, index) => ({
+    x: PAD.left + index * step,
+    y: PAD.top + chartH - ((point.weight - minW) / range) * chartH,
+    label: point.label,
+  }));
 
-  const polyStr = points.map((p) => `${p.x},${p.y}`).join(" ");
-  const lastPt = points[points.length - 1]!;
-  const areaPath = `M${PAD.left},${PAD.top + chartH} ${points.map((p) => `L${p.x},${p.y}`).join(" ")} L${lastPt.x},${PAD.top + chartH} Z`;
+  const polyStr = points.map((point) => `${point.x},${point.y}`).join(" ");
+  const lastPoint = points[points.length - 1]!;
+  const areaPath = `M${PAD.left},${PAD.top + chartH} ${points
+    .map((point) => `L${point.x},${point.y}`)
+    .join(" ")} L${lastPoint.x},${PAD.top + chartH} Z`;
 
   return (
     <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
@@ -531,27 +794,25 @@ function WeightChart({
           <Stop offset="1" stopColor={colors.success} stopOpacity="0" />
         </LinearGradient>
       </Defs>
-      {/* Y axis labels */}
-      {[minW, (minW + maxW) / 2, maxW].map((v, i) => (
+      {[minW, (minW + maxW) / 2, maxW].map((value, index) => (
         <SvgText
-          key={i}
+          key={index}
           x={PAD.left - 4}
-          y={PAD.top + chartH - ((v - minW) / range) * chartH + 3}
+          y={PAD.top + chartH - ((value - minW) / range) * chartH + 3}
           fontSize={7}
           fill={colors.muted}
           textAnchor="end"
         >
-          {v.toFixed(1)}
+          {value.toFixed(1)}
         </SvgText>
       ))}
-      {/* Grid */}
-      {[0, 0.5, 1].map((f) => (
+      {[0, 0.5, 1].map((frac) => (
         <Line
-          key={f}
+          key={frac}
           x1={PAD.left}
-          y1={PAD.top + chartH * (1 - f)}
+          y1={PAD.top + chartH * (1 - frac)}
           x2={W - PAD.right}
-          y2={PAD.top + chartH * (1 - f)}
+          y2={PAD.top + chartH * (1 - frac)}
           stroke={colors.border}
           strokeWidth={0.6}
           strokeDasharray="4,3"
@@ -566,28 +827,20 @@ function WeightChart({
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {points.map((p, i) => (
+      {points.map((point, index) => (
         <Circle
-          key={i}
-          cx={p.x}
-          cy={p.y}
-          r={i === points.length - 1 ? 4 : 2.5}
-          fill={i === points.length - 1 ? colors.success : colors.background}
+          key={index}
+          cx={point.x}
+          cy={point.y}
+          r={index === points.length - 1 ? 4 : 2.5}
+          fill={index === points.length - 1 ? colors.success : colors.background}
           stroke={colors.success}
           strokeWidth={1.5}
         />
       ))}
-      {/* X labels */}
-      {points.map((p, i) => (
-        <SvgText
-          key={i}
-          x={p.x}
-          y={H - 4}
-          fontSize={7}
-          fill={colors.muted}
-          textAnchor="middle"
-        >
-          {p.date.split(" ")[0]}
+      {points.map((point, index) => (
+        <SvgText key={index} x={point.x} y={H - 4} fontSize={7} fill={colors.muted} textAnchor="middle">
+          {point.label}
         </SvgText>
       ))}
     </Svg>
@@ -595,29 +848,14 @@ function WeightChart({
 }
 
 function CrossRefTable({
-  data,
+  cross,
   colors,
 }: {
-  data: typeof NUTRITION_DAYS;
+  cross: NonNullable<ProgressData["cross"]>;
   colors: ColorPalette;
 }) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const workoutAvgCal = Math.round(
-    data.filter((d) => d.workout).reduce((s, d) => s + d.calories, 0) /
-      data.filter((d) => d.workout).length,
-  );
-  const restAvgCal = Math.round(
-    data.filter((d) => !d.workout).reduce((s, d) => s + d.calories, 0) /
-      data.filter((d) => !d.workout).length,
-  );
-  const workoutAvgProt = Math.round(
-    data.filter((d) => d.workout).reduce((s, d) => s + d.protein, 0) /
-      data.filter((d) => d.workout).length,
-  );
-  const restAvgProt = Math.round(
-    data.filter((d) => !d.workout).reduce((s, d) => s + d.protein, 0) /
-      data.filter((d) => !d.workout).length,
-  );
+  const maxCal = Math.max(cross.workoutCal, cross.restCal, 1);
 
   return (
     <View style={styles.crossTable}>
@@ -625,26 +863,15 @@ function CrossRefTable({
         <Text style={[styles.crossCell, styles.crossCellLabel]} />
         <Text style={[styles.crossCell, styles.crossColHead]}>Calorías</Text>
         <Text style={[styles.crossCell, styles.crossColHead]}>Proteína</Text>
-        <Text style={[styles.crossCell, styles.crossColHead]}>Diferencia</Text>
+        <Text style={[styles.crossCell, styles.crossColHead]} />
       </View>
-      <CrossRow
-        label="Días entreno"
-        cal={workoutAvgCal}
-        prot={workoutAvgProt}
-        highlight
-        colors={colors}
-      />
-      <CrossRow
-        label="Días descanso"
-        cal={restAvgCal}
-        prot={restAvgProt}
-        highlight={false}
-        colors={colors}
-      />
+      <CrossRow label="Días entreno" cal={cross.workoutCal} prot={cross.workoutProt} maxCal={maxCal} highlight colors={colors} />
+      <CrossRow label="Días descanso" cal={cross.restCal} prot={cross.restProt} maxCal={maxCal} highlight={false} colors={colors} />
       <CrossRow
         label="Diferencia"
-        cal={workoutAvgCal - restAvgCal}
-        prot={workoutAvgProt - restAvgProt}
+        cal={cross.workoutCal - cross.restCal}
+        prot={cross.workoutProt - cross.restProt}
+        maxCal={maxCal}
         isDelta
         highlight={false}
         colors={colors}
@@ -657,6 +884,7 @@ function CrossRow({
   label,
   cal,
   prot,
+  maxCal,
   highlight,
   isDelta,
   colors,
@@ -664,26 +892,37 @@ function CrossRow({
   label: string;
   cal: number;
   prot: number;
+  maxCal: number;
   highlight?: boolean;
   isDelta?: boolean;
   colors: ColorPalette;
 }) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const calColor = isDelta ? (cal > 0 ? colors.success : colors.danger) : colors.text;
-  const protColor = isDelta ? (prot > 0 ? colors.success : colors.danger) : colors.text;
+  const calColor = isDelta ? (cal >= 0 ? colors.success : colors.danger) : colors.text;
+  const protColor = isDelta ? (prot >= 0 ? colors.success : colors.danger) : colors.text;
 
   return (
     <View style={[styles.crossRow, highlight && styles.crossRowHighlight]}>
       <Text style={[styles.crossCell, styles.crossCellLabel]}>{label}</Text>
       <Text style={[styles.crossCell, { color: calColor, fontWeight: "900" }]}>
-        {isDelta && cal > 0 ? "+" : ""}{cal} kcal
+        {isDelta && cal > 0 ? "+" : ""}
+        {cal} kcal
       </Text>
       <Text style={[styles.crossCell, { color: protColor, fontWeight: "900" }]}>
-        {isDelta && prot > 0 ? "+" : ""}{prot}g
+        {isDelta && prot > 0 ? "+" : ""}
+        {prot}g
       </Text>
       <View style={styles.crossCell}>
         {isDelta ? null : (
-          <View style={[styles.barInline, { width: `${Math.min((cal / 2600) * 100, 100)}%`, backgroundColor: highlight ? colors.energy : colors.surfaceStrong }]} />
+          <View
+            style={[
+              styles.barInline,
+              {
+                width: `${Math.min((cal / maxCal) * 100, 100)}%`,
+                backgroundColor: highlight ? colors.energy : colors.surfaceStrong,
+              },
+            ]}
+          />
         )}
       </View>
     </View>
@@ -710,32 +949,35 @@ function BodyStat({
   );
 }
 
-function PRRow({
-  pr,
-  colors,
-}: {
-  pr: typeof PERSONAL_RECORDS[0];
-  colors: ColorPalette;
-}) {
+function PRRow({ record, colors }: { record: PersonalRecord; colors: ColorPalette }) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.prRow}>
       <View style={styles.prLeft}>
-        <Text style={styles.prName}>{pr.exercise}</Text>
-        <Text style={styles.prDate}>{pr.date}</Text>
+        <Text style={styles.prName}>{record.exercise}</Text>
+        <Text style={styles.prDate}>{record.date}</Text>
       </View>
       <View style={styles.prRight}>
-        <Text style={styles.prKg}>{pr.kg} kg</Text>
-        <View style={styles.prDeltaBadge}>
-          <TrendingUp size={10} color={colors.success} />
-          <Text style={styles.prDelta}>{pr.delta}</Text>
-        </View>
+        <Text style={styles.prKg}>{record.kg} kg</Text>
+        {record.deltaKg !== 0 ? (
+          <View style={styles.prDeltaBadge}>
+            {record.deltaKg > 0 ? (
+              <TrendingUp size={10} color={colors.success} />
+            ) : (
+              <TrendingDown size={10} color={colors.muted} />
+            )}
+            <Text style={[styles.prDelta, record.deltaKg < 0 && { color: colors.muted }]}>
+              {record.deltaKg > 0 ? "+" : ""}
+              {record.deltaKg} kg
+            </Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Estilos ─────────────────────────────────────────────────────────────────
 
 function makeStyles(colors: ColorPalette) {
   return StyleSheet.create({
@@ -780,6 +1022,15 @@ function makeStyles(colors: ColorPalette) {
     periodLabelActive: {
       color: colors.text,
     },
+    error: {
+      color: colors.danger,
+      fontSize: 13,
+    },
+    hintText: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 19,
+    },
     kpiRow: {
       flexDirection: "row",
       gap: 10,
@@ -806,7 +1057,6 @@ function makeStyles(colors: ColorPalette) {
       fontWeight: "700",
     },
     kpiSub: {
-      color: colors.success,
       fontSize: 10,
       fontWeight: "800",
     },
@@ -833,14 +1083,6 @@ function makeStyles(colors: ColorPalette) {
     aiDate: {
       color: colors.muted,
       fontSize: 11,
-    },
-    aiSkeleton: {
-      gap: 8,
-    },
-    aiSkeletonLine: {
-      height: 10,
-      borderRadius: 5,
-      backgroundColor: colors.surfaceStrong,
     },
     aiBody: {
       color: colors.text,

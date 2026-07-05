@@ -39,7 +39,7 @@ async function getAccessToken(): Promise<string> {
   return token;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}, timeoutMs = 18000): Promise<T> {
   const token = await getAccessToken();
   let response: Response;
 
@@ -53,10 +53,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
           ...options.headers,
         },
       }),
-      18000,
+      timeoutMs,
       `El backend no respondio a tiempo en ${env.apiUrl}.`,
     );
-  } catch {
+  } catch (caught) {
+    if (caught instanceof Error && caught.message.includes("no respondio a tiempo")) {
+      throw caught;
+    }
     throw new Error(
       `No pude conectar con el backend en ${env.apiUrl}. Revisa que dev:api este corriendo y que el celular este en la misma Wi-Fi.`,
     );
@@ -162,12 +165,12 @@ const realApi = {
       request<FoodPhotoAnalysis>(`/profiles/${profileId}/ai/analyze-food-photo`, {
         method: "POST",
         body: JSON.stringify({ imageUrl, notes }),
-      }),
+      }, 90000),
     analyzeMachine: (profileId: string, imageUrl: string, notes?: string) =>
       request<GymMachineAnalysis>(`/profiles/${profileId}/ai/analyze-gym-machine-photo`, {
         method: "POST",
         body: JSON.stringify({ imageUrl, notes }),
-      }),
+      }, 90000),
     chat: (profileId: string, message: string, threadId?: string) =>
       request<AIChatResult>(`/profiles/${profileId}/ai/chat`, {
         method: "POST",

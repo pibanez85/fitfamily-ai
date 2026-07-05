@@ -1,5 +1,6 @@
 import { router } from "expo-router";
 import { Check } from "lucide-react-native";
+import { useMemo } from "react";
 import { StyleSheet, Text } from "react-native";
 import { AppButton } from "@/components/AppButton";
 import { Card } from "@/components/Card";
@@ -7,15 +8,18 @@ import { Screen } from "@/components/Screen";
 import { EmptyState } from "@/components/StateViews";
 import { BodyText, Subtitle, Title } from "@/components/Typography";
 import { useAppStore } from "@/store/appStore";
-import { colors } from "@/theme/colors";
+import type { ColorPalette } from "@/theme/colors";
+import { useTheme } from "@/theme/theme";
 
 export default function FoodAnalysisScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const analysis = useAppStore((state) => state.pendingFoodAnalysis);
 
   if (!analysis) {
     return (
       <Screen>
-        <EmptyState title="Sin analisis activo" body="Sube una foto de comida para ver resultados." />
+        <EmptyState title="Sin análisis activo" body="Sube una foto de comida para ver resultados." />
       </Screen>
     );
   }
@@ -44,17 +48,19 @@ export default function FoodAnalysisScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  total: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: "900",
-  },
-  item: {
-    color: colors.text,
-    fontWeight: "900",
-  },
-  disclaimer: {
-    color: colors.warning,
-  },
-});
+function makeStyles(colors: ColorPalette) {
+  return StyleSheet.create({
+    total: {
+      color: colors.text,
+      fontSize: 24,
+      fontWeight: "900",
+    },
+    item: {
+      color: colors.text,
+      fontWeight: "900",
+    },
+    disclaimer: {
+      color: colors.warning,
+    },
+  });
+}

@@ -102,9 +102,9 @@ export default function EditProfileScreen() {
         <View style={styles.coachHeader}>
           <Dumbbell size={22} color={colors.energy} />
           <View style={styles.coachText}>
-            <Text style={styles.coachTitle}>Configuracion de coach</Text>
+            <Text style={styles.coachTitle}>Configuración de coach</Text>
             <BodyText style={styles.coachBody}>
-              Con estos datos la app ajusta entrenamientos, nutricion y respuestas del chat.
+              Con estos datos la app ajusta entrenamientos, nutrición y respuestas del chat.
             </BodyText>
           </View>
         </View>
@@ -184,19 +184,19 @@ const activityOptions: ChoiceOption[] = [
   { label: "Bajo", value: "bajo", description: "0 a 1 entrenos por semana" },
   { label: "Ligero", value: "ligero", description: "2 entrenos por semana" },
   { label: "Moderado", value: "moderado", description: "3 a 4 entrenos por semana" },
-  { label: "Alto", value: "alto", description: "5 o mas entrenos por semana" },
+  { label: "Alto", value: "alto", description: "5 o más entrenos por semana" },
 ];
 
 const goalOptions: ChoiceOption[] = [
-  { label: "Ganar fuerza", value: "ganar-fuerza", description: "Prioriza progresion de cargas y tecnica" },
-  { label: "Perder grasa", value: "perder-grasa", description: "Control de calorias, proteina y constancia" },
+  { label: "Ganar fuerza", value: "ganar-fuerza", description: "Prioriza progresión de cargas y tecnica" },
+  { label: "Perder grasa", value: "perder-grasa", description: "Control de calorías, proteína y constancia" },
   { label: "Ganar musculo", value: "ganar-musculo", description: "Volumen, fuerza y superavit moderado" },
-  { label: "Salud y energia", value: "salud-energia", description: "Rutina sostenible y comida balanceada" },
+  { label: "Salud y energía", value: "salud-energía", description: "Rutina sostenible y comida balanceada" },
 ];
 
 const dietOptions: ChoiceOption[] = [
   { label: "Balanceado", value: "balanceado" },
-  { label: "Alto en proteina", value: "alto-proteina" },
+  { label: "Alto en proteína", value: "alto-proteína" },
   { label: "Control de peso", value: "control-peso" },
 ];
 

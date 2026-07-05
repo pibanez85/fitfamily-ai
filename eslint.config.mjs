@@ -7,6 +7,7 @@ export default [
       "**/node_modules/**",
       "**/dist/**",
       "**/.expo/**",
+      "**/.claude/**",
       "**/coverage/**",
       "apps/mobile/.expo/**",
       "apps/mobile/babel.config.js",

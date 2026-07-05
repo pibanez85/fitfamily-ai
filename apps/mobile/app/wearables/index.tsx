@@ -88,8 +88,7 @@ function StepsRing({
           fill="none"
           strokeDasharray={`${dash} ${circumference}`}
           strokeLinecap="round"
-          rotation="-90"
-          origin={`${cx}, ${cx}`}
+          transform={`rotate(-90, ${cx}, ${cx})`}
         />
         {/* Center text */}
         <SvgText

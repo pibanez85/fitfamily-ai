@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, router } from "expo-router";
 import { UserPlus } from "lucide-react-native";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { StyleSheet, Text } from "react-native";
 import { z } from "zod";
@@ -14,16 +14,19 @@ import { supabase } from "@/lib/supabase";
 import { getAuthErrorMessage } from "@/services/authErrors";
 import { withTimeout } from "@/services/asyncUtils";
 import { useAppStore } from "@/store/appStore";
-import { colors } from "@/theme/colors";
+import type { ColorPalette } from "@/theme/colors";
+import { useTheme } from "@/theme/theme";
 
 const RegisterSchema = z.object({
-  email: z.email("Email invalido"),
+  email: z.email("Email inválido"),
   password: z.string().min(8, "Usa al menos 8 caracteres"),
 });
 
 type RegisterForm = z.infer<typeof RegisterSchema>;
 
 export default function RegisterScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -54,7 +57,7 @@ export default function RegisterScreen() {
         return;
       }
 
-      setNotice("Cuenta creada. Revisa tu correo para confirmar el email y despues inicia sesion.");
+      setNotice("Cuenta creada. Revisa tu correo para confirmar el email y despues inicia sesión.");
     } catch (caught) {
       setError(getAuthErrorMessage(caught));
     } finally {
@@ -66,7 +69,7 @@ export default function RegisterScreen() {
   return (
     <Screen>
       <Title>Crear cuenta</Title>
-      <Subtitle>Supabase Auth maneja la identidad; la app nunca guarda claves privadas.</Subtitle>
+      <Subtitle>Tu cuenta protege tus datos; la app nunca guarda claves privadas.</Subtitle>
       <Card>
         <FormField
           control={control}
@@ -89,24 +92,26 @@ export default function RegisterScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  error: {
-    color: colors.danger,
-    fontSize: 13,
-  },
-  notice: {
-    color: colors.success,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  status: {
-    color: colors.energy,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  link: {
-    color: colors.primary,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-});
+function makeStyles(colors: ColorPalette) {
+  return StyleSheet.create({
+    error: {
+      color: colors.danger,
+      fontSize: 13,
+    },
+    notice: {
+      color: colors.success,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    status: {
+      color: colors.energy,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    link: {
+      color: colors.primary,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+  });
+}

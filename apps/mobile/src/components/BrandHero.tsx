@@ -1,7 +1,18 @@
 import { Dumbbell } from "lucide-react-native";
 import { ImageBackground, StyleSheet, Text, View } from "react-native";
-import { colors, radius } from "@/theme/colors";
+import { radius } from "@/theme/colors";
 import { gymImages } from "@/theme/images";
+
+// El hero va siempre sobre una foto oscura: usa colores fijos para mantener
+// contraste correcto en tema claro y oscuro.
+const heroColors = {
+  surface: "#111823",
+  overlay: "rgba(3, 7, 18, 0.58)",
+  primary: "#2dd4bf",
+  energy: "#facc15",
+  text: "#f8fafc",
+  shadow: "#000000",
+};
 
 type BrandHeroProps = {
   subtitle?: string;
@@ -32,7 +43,7 @@ const styles = StyleSheet.create({
     minHeight: 230,
     overflow: "hidden",
     borderRadius: radius.lg,
-    backgroundColor: colors.surface,
+    backgroundColor: heroColors.surface,
     justifyContent: "flex-end",
     marginBottom: 4,
   },
@@ -45,7 +56,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: colors.overlay,
+    backgroundColor: heroColors.overlay,
   },
   content: {
     gap: 12,
@@ -62,8 +73,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.primary,
-    shadowColor: colors.shadow,
+    backgroundColor: heroColors.primary,
+    shadowColor: heroColors.shadow,
     shadowOpacity: 0.18,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
@@ -78,12 +89,12 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   badgeText: {
-    color: colors.energy,
+    color: heroColors.energy,
     fontSize: 12,
     fontWeight: "900",
   },
   name: {
-    color: colors.text,
+    color: heroColors.text,
     fontSize: 36,
     fontWeight: "900",
   },

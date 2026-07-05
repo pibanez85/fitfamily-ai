@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, router, type Href } from "expo-router";
 import { LogIn, Sparkles } from "lucide-react-native";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
@@ -17,17 +17,20 @@ import { getAuthErrorMessage } from "@/services/authErrors";
 import { withTimeout } from "@/services/asyncUtils";
 import { supabase } from "@/lib/supabase";
 import { useAppStore } from "@/store/appStore";
-import { colors } from "@/theme/colors";
+import type { ColorPalette } from "@/theme/colors";
+import { useTheme } from "@/theme/theme";
 
 const LoginSchema = z.object({
-  email: z.email("Email invalido"),
-  password: z.string().min(6, "Minimo 6 caracteres"),
+  email: z.email("Email inválido"),
+  password: z.string().min(6, "Mínimo 6 caracteres"),
 });
 
 type LoginForm = z.infer<typeof LoginSchema>;
 const forgotPasswordHref = "/forgot-password" as Href;
 
 export default function LoginScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -52,11 +55,11 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const email = values.email.trim().toLowerCase();
-      setStatus("Limpiando sesion anterior...");
+      setStatus("Limpiando sesión anterior...");
       await withTimeout(
         supabase.auth.signOut({ scope: "local" }),
         10000,
-        "No pude limpiar la sesion anterior. Cierra Expo Go y vuelve a abrir la app.",
+        "No pude limpiar la sesión anterior. Cierra Expo Go y vuelve a abrir la app.",
       );
 
       setStatus("Validando correo y clave en Supabase...");
@@ -67,7 +70,7 @@ export default function LoginScreen() {
       );
       if (authError) throw authError;
       if (data.session) setSession(data.session);
-      setStatus("Sesion iniciada. Abriendo perfiles...");
+      setStatus("Sesión iniciada. Abriendo perfiles...");
       router.replace("/profiles");
     } catch (caught) {
       setError(getAuthErrorMessage(caught));
@@ -109,7 +112,7 @@ export default function LoginScreen() {
             <Text style={styles.demoTitle}>Modo demo activo</Text>
           </View>
           <BodyText style={styles.demoText}>
-            No hay credenciales configuradas, asi que la app corre con datos de ejemplo. Entra con un toque y
+            No hay credenciales configuradas, así que la app corre con datos de ejemplo. Entra con un toque y
             explora todo sin configurar nada.
           </BodyText>
           <AppButton label="Entrar en modo demo" icon={Sparkles} loading={demoLoading} onPress={enterDemo} />
@@ -127,11 +130,11 @@ export default function LoginScreen() {
         />
         <FormField control={control} name="password" label="Clave" secureTextEntry />
         <Link href={forgotPasswordHref} style={styles.forgotLink}>
-          Olvide mi clave
+          Olvidé mi clave
         </Link>
         {status ? <Text style={styles.status}>{status}</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <AppButton label="Iniciar sesion" icon={LogIn} loading={loading} onPress={handleSubmit(onSubmit)} />
+        <AppButton label="Iniciar sesión" icon={LogIn} loading={loading} onPress={handleSubmit(onSubmit)} />
       </Card>
 
       <Link href="/register" style={styles.link}>
@@ -141,41 +144,43 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  error: {
-    color: colors.danger,
-    fontSize: 13,
-  },
-  status: {
-    color: colors.energy,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  demoCard: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-  },
-  demoHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  demoTitle: {
-    color: colors.primaryDark,
-    fontWeight: "800",
-    fontSize: 16,
-  },
-  demoText: {
-    color: colors.primaryDark,
-  },
-  link: {
-    color: colors.primary,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  forgotLink: {
-    color: colors.primary,
-    fontWeight: "800",
-    textAlign: "right",
-  },
-});
+function makeStyles(colors: ColorPalette) {
+  return StyleSheet.create({
+    error: {
+      color: colors.danger,
+      fontSize: 13,
+    },
+    status: {
+      color: colors.energy,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    demoCard: {
+      backgroundColor: colors.primarySoft,
+      borderColor: colors.primary,
+    },
+    demoHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    demoTitle: {
+      color: colors.text,
+      fontWeight: "800",
+      fontSize: 16,
+    },
+    demoText: {
+      color: colors.text,
+    },
+    link: {
+      color: colors.primary,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+    forgotLink: {
+      color: colors.primary,
+      fontWeight: "800",
+      textAlign: "right",
+    },
+  });
+}

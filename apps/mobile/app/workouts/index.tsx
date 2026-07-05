@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from "expo-router";
-import { Activity, Check, Clock, Dumbbell, Plus, Sparkles, Star, Trash2 } from "lucide-react-native";
+import { Activity, Check, Clock, Dumbbell, Pencil, Plus, Sparkles, Star, Trash2 } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import type { Workout } from "@fitfamily-ai/shared";
@@ -82,7 +82,7 @@ export default function WorkoutsScreen() {
   return (
     <Screen>
       <Title>Rutinas</Title>
-      <Subtitle>Tu rutina base se ejecuta cada semana. Puedes modificarla por dia con la IA.</Subtitle>
+      <Subtitle>Tu rutina base se ejecuta cada semana. Puedes modificarla por día con la IA.</Subtitle>
 
       <AppButton label="Crear rutina con IA" icon={Sparkles} onPress={() => router.push("/workouts/create")} />
       <AppButton
@@ -118,8 +118,8 @@ export default function WorkoutsScreen() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {!loading && workouts.length === 0 ? (
         <EmptyState
-          title="Aun no tienes rutinas"
-          body="Crea tu primera rutina para que la app te guie dia a dia. Demora un par de minutos."
+          title="Aún no tienes rutinas"
+          body="Crea tu primera rutina para que la app te guie día a día. Demora un par de minutos."
         />
       ) : null}
 
@@ -138,7 +138,7 @@ export default function WorkoutsScreen() {
                 ) : null}
               </View>
               <BodyText style={styles.meta}>
-                {workout.goal ?? workout.description ?? "Rutina sin descripcion."}
+                {workout.goal ?? workout.description ?? "Rutina sin descripción."}
               </BodyText>
               <View style={styles.cardActions}>
                 {!isActive ? (
@@ -165,6 +165,17 @@ export default function WorkoutsScreen() {
                     <Text style={styles.actionPillText}>Desactivar</Text>
                   </Pressable>
                 )}
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    router.push({ pathname: "/workouts/create", params: { workoutId: workout.id } });
+                  }}
+                  style={styles.actionPill}
+                >
+                  <Pencil size={14} color={colors.primary} />
+                  <Text style={styles.actionPillText}>Editar</Text>
+                </Pressable>
                 <Pressable
                   accessibilityRole="button"
                   disabled={deletingId === workout.id}

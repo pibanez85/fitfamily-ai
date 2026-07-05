@@ -1,10 +1,9 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as Linking from "expo-linking";
 import { Link } from "expo-router";
 import { Mail, Send } from "lucide-react-native";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { AppButton } from "@/components/AppButton";
 import { Card } from "@/components/Card";
@@ -14,19 +13,26 @@ import { BodyText, Subtitle, Title } from "@/components/Typography";
 import { supabase } from "@/lib/supabase";
 import { getAuthErrorMessage } from "@/services/authErrors";
 import { withTimeout } from "@/services/asyncUtils";
-import { colors } from "@/theme/colors";
+import type { ColorPalette } from "@/theme/colors";
+import { useTheme } from "@/theme/theme";
 
 const ForgotPasswordSchema = z.object({
-  email: z.email("Email invalido"),
+  email: z.email("Email inválido"),
 });
 
 type ForgotPasswordForm = z.infer<typeof ForgotPasswordSchema>;
 
 function getResetRedirectUrl() {
-  return Linking.createURL("/reset-password");
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    return `${window.location.origin}/reset-password`;
+  }
+
+  return "fitfamilyai://reset-password";
 }
 
 export default function ForgotPasswordScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -39,7 +45,7 @@ export default function ForgotPasswordScreen() {
   async function onSubmit(values: ForgotPasswordForm) {
     setError(null);
     setNotice(null);
-    setStatus("Enviando correo de recuperacion...");
+    setStatus("Enviando correo de recuperación...");
     setLoading(true);
     try {
       const email = values.email.trim().toLowerCase();
@@ -52,7 +58,7 @@ export default function ForgotPasswordScreen() {
       if (resetError) throw resetError;
 
       setNotice(
-        "Listo. Revisa tu correo y abre el enlace de recuperacion desde este celular para crear una clave nueva.",
+        "Listo. Revisa tu correo y abre el enlace de recuperación desde este celular para crear una clave nueva.",
       );
     } catch (caught) {
       setError(getAuthErrorMessage(caught));
@@ -89,41 +95,43 @@ export default function ForgotPasswordScreen() {
       </Card>
 
       <Link href="/login" style={styles.link}>
-        Volver a iniciar sesion
+        Volver a iniciar sesión
       </Link>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  iconBox: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-    borderRadius: 14,
-    borderWidth: 1,
-    height: 46,
-    justifyContent: "center",
-    width: 46,
-  },
-  error: {
-    color: colors.danger,
-    fontSize: 13,
-  },
-  notice: {
-    color: colors.success,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  status: {
-    color: colors.energy,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  link: {
-    color: colors.primary,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-});
+function makeStyles(colors: ColorPalette) {
+  return StyleSheet.create({
+    iconBox: {
+      alignItems: "center",
+      alignSelf: "flex-start",
+      backgroundColor: colors.primarySoft,
+      borderColor: colors.primary,
+      borderRadius: 14,
+      borderWidth: 1,
+      height: 46,
+      justifyContent: "center",
+      width: 46,
+    },
+    error: {
+      color: colors.danger,
+      fontSize: 13,
+    },
+    notice: {
+      color: colors.success,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    status: {
+      color: colors.energy,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    link: {
+      color: colors.primary,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+  });
+}

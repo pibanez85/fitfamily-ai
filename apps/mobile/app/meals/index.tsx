@@ -1,5 +1,7 @@
 import { router, useFocusEffect } from "expo-router";
-import { Bot, Camera, Plus, Search, Sparkles, Utensils } from "lucide-react-native";
+import { Bot, Camera, Coffee, Cookie, Moon, Plus, Search, Sparkles, UtensilsCrossed } from "lucide-react-native";
+import type { LucideProps } from "lucide-react-native";
+import type { ComponentType } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { MacroTotals, Meal } from "@fitfamily-ai/shared";
@@ -11,6 +13,8 @@ import { EmptyState, LoadingState } from "@/components/StateViews";
 import { BodyText, Subtitle, Title } from "@/components/Typography";
 import { useActiveProfileId } from "@/lib/activeProfile";
 import { api } from "@/services/api";
+import { useAppStore } from "@/store/appStore";
+import { computeNutritionGoals } from "@/utils/nutritionGoals";
 import type { ColorPalette } from "@/theme/colors";
 import { radius } from "@/theme/colors";
 import { useTheme } from "@/theme/theme";
@@ -25,18 +29,15 @@ type MealBucket = {
   meals: MealWithItems[];
 };
 
-const dailyGoals = {
-  calories: 2200,
-  proteinG: 140,
-  carbsG: 250,
-  fatG: 70,
-};
-
 export default function MealsScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const profileId = useActiveProfileId();
+  const profile = useAppStore((state) =>
+    state.profiles.find((entry) => entry.id === state.activeProfileId) ?? null,
+  );
   const [meals, setMeals] = useState<MealWithItems[]>([]);
+  const [latestWeightKg, setLatestWeightKg] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
@@ -44,10 +45,15 @@ export default function MealsScreen() {
       if (!profileId) return;
       let alive = true;
       setLoading(true);
-      api.meals
-        .list(profileId)
-        .then((items) => {
-          if (alive) setMeals(items as MealWithItems[]);
+      Promise.all([api.meals.list(profileId), api.bodyMetrics.list(profileId).catch(() => [])])
+        .then(([items, metrics]) => {
+          if (!alive) return;
+          setMeals(items as MealWithItems[]);
+          const lastWeight = metrics
+            .slice()
+            .sort((a, b) => (a.measuredAt < b.measuredAt ? 1 : -1))
+            .find((metric) => metric.weightKg != null)?.weightKg;
+          setLatestWeightKg(lastWeight ?? null);
         })
         .finally(() => {
           if (alive) setLoading(false);
@@ -56,6 +62,11 @@ export default function MealsScreen() {
         alive = false;
       };
     }, [profileId]),
+  );
+
+  const dailyGoals = useMemo(
+    () => computeNutritionGoals(profile, latestWeightKg),
+    [profile, latestWeightKg],
   );
 
   const todayMeals = useMemo(() => meals.filter((meal) => isSameLocalDay(meal.eatenAt, new Date())), [meals]);
@@ -70,8 +81,8 @@ export default function MealsScreen() {
     <Screen>
       <View style={styles.headerRow}>
         <View style={styles.headerText}>
-          <Title>Nutricion</Title>
-          <Subtitle>Tu dia de comida con macros claros, porciones reales e IA cuando haya dudas.</Subtitle>
+          <Title>Nutrición</Title>
+          <Subtitle>Tu día de comida con macros claros, porciones reales e IA cuando haya dudas.</Subtitle>
         </View>
         <Pressable style={styles.aiButton} onPress={() => router.push("/chat")}>
           <Bot size={20} color={colors.onPrimary} />
@@ -83,7 +94,9 @@ export default function MealsScreen() {
           <View>
             <Text style={styles.heroLabel}>Consumido hoy</Text>
             <Text style={styles.calorieValue}>{Math.round(totals.calories)} kcal</Text>
-            <Text style={styles.remainingText}>{remainingCalories} kcal restantes de meta referencial</Text>
+            <Text style={styles.remainingText}>
+              {remainingCalories} kcal restantes de tu meta de {dailyGoals.calories}
+            </Text>
           </View>
           <View style={styles.scorePill}>
             <Sparkles size={15} color={colors.energy} />
@@ -92,11 +105,16 @@ export default function MealsScreen() {
         </View>
         <MacroDonut totals={totals} />
         <View style={styles.progressStack}>
-          <MacroProgress label="Proteina" value={totals.proteinG} goal={dailyGoals.proteinG} color={colors.primary} />
+          <MacroProgress label="Proteína" value={totals.proteinG} goal={dailyGoals.proteinG} color={colors.primary} />
           <MacroProgress label="Carbohidratos" value={totals.carbsG} goal={dailyGoals.carbsG} color={colors.energy} />
           <MacroProgress label="Grasas" value={totals.fatG} goal={dailyGoals.fatG} color={colors.accent} />
         </View>
-        <BodyText style={styles.goalHint}>Meta referencial para MVP. Luego la conectaremos a objetivos personales.</BodyText>
+        <BodyText style={styles.goalHint}>{dailyGoals.explanation}</BodyText>
+        {dailyGoals.personalized ? null : (
+          <Pressable onPress={() => router.push("/profiles/edit")}>
+            <Text style={styles.goalLink}>Completar mi perfil</Text>
+          </Pressable>
+        )}
       </Card>
 
       <View style={styles.actions}>
@@ -126,11 +144,11 @@ export default function MealsScreen() {
         <Text style={styles.sectionTitle}>Semana</Text>
         <View style={styles.weekGrid}>
           <View style={styles.weekCard}>
-            <Text style={styles.weekTitle}>Calorias</Text>
+            <Text style={styles.weekTitle}>Calorías</Text>
             <MiniBarChart values={weekCalories} color={colors.energy} />
           </View>
           <View style={styles.weekCard}>
-            <Text style={styles.weekTitle}>Proteina</Text>
+            <Text style={styles.weekTitle}>Proteína</Text>
             <MiniBarChart values={weekProtein} color={colors.primary} />
           </View>
         </View>
@@ -139,7 +157,7 @@ export default function MealsScreen() {
       <Card>
         <Text style={styles.sectionTitle}>Frecuentes y recientes</Text>
         {frequentFoods.length === 0 ? (
-          <BodyText style={styles.muted}>Aun no hay patrones. Al registrar comidas, aca apareceran tus alimentos repetidos.</BodyText>
+          <BodyText style={styles.muted}>Aún no hay patrones. Al registrar comidas, aca apareceran tus alimentos repetidos.</BodyText>
         ) : (
           <View style={styles.frequentRow}>
             {frequentFoods.map((item) => (
@@ -152,15 +170,25 @@ export default function MealsScreen() {
   );
 }
 
+// Identidad visual por momento del día: icono y color propios.
+const mealTypeVisuals: Record<string, { icon: ComponentType<LucideProps>; tint: string }> = {
+  breakfast: { icon: Coffee, tint: "#f59e0b" },
+  lunch: { icon: UtensilsCrossed, tint: "#10b981" },
+  dinner: { icon: Moon, tint: "#8b5cf6" },
+  snack: { icon: Cookie, tint: "#f43f5e" },
+};
+
 function MealBucketCard({ bucket }: { bucket: MealBucket }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const totals = sumMeals(bucket.meals);
+  const visual = mealTypeVisuals[bucket.type] ?? { icon: UtensilsCrossed, tint: colors.primary };
+  const MealIcon = visual.icon;
   return (
     <View style={styles.bucketCard}>
       <View style={styles.bucketHeader}>
-        <View style={styles.mealIcon}>
-          <Utensils size={17} color={colors.energy} />
+        <View style={[styles.mealIcon, { backgroundColor: `${visual.tint}1f` }]}>
+          <MealIcon size={17} color={visual.tint} />
         </View>
         <View style={styles.bucketTitleCol}>
           <Text style={styles.bucketTitle}>{bucket.label}</Text>
@@ -276,6 +304,7 @@ function makeStyles(colors: ColorPalette) {
     scoreText: { color: colors.text, fontWeight: "900", fontSize: 12 },
     progressStack: { gap: 12 },
     goalHint: { color: colors.muted, fontSize: 12 },
+    goalLink: { color: colors.primary, fontSize: 12.5, fontWeight: "900" },
     actions: { flexDirection: "row", gap: 10 },
     action: { flex: 1 },
     sectionTitle: { color: colors.text, fontSize: 18, fontWeight: "900" },
@@ -290,12 +319,11 @@ function makeStyles(colors: ColorPalette) {
     },
     bucketHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
     mealIcon: {
-      width: 38,
-      height: 38,
-      borderRadius: radius.sm,
+      width: 40,
+      height: 40,
+      borderRadius: 13,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: colors.energySoft,
     },
     bucketTitleCol: { flex: 1, gap: 2 },
     bucketTitle: { color: colors.text, fontWeight: "900", fontSize: 15 },

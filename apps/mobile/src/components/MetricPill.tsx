@@ -24,13 +24,13 @@ export function MetricPill({ label, value, tone = "neutral" }: MetricPillProps) 
 function makeStyles(colors: ColorPalette) {
   return StyleSheet.create({
     pill: {
-      minWidth: 74,
-      borderRadius: radius.sm,
+      minWidth: 76,
+      borderRadius: radius.sm + 2,
       borderWidth: 1,
       borderColor: colors.border,
-      backgroundColor: colors.backgroundElevated,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
+      backgroundColor: colors.surfaceMuted,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
       gap: 2,
     },
     primary: {
@@ -43,13 +43,16 @@ function makeStyles(colors: ColorPalette) {
     },
     value: {
       color: colors.text,
-      fontSize: 16,
+      fontSize: 17,
       fontWeight: "900",
+      letterSpacing: -0.4,
     },
     label: {
       color: colors.muted,
-      fontSize: 11,
-      fontWeight: "700",
+      fontSize: 10.5,
+      fontWeight: "800",
+      letterSpacing: 0.5,
+      textTransform: "uppercase",
     },
   });
 }

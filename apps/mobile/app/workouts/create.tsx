@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import {
   ArrowLeft,
   ArrowRight,
@@ -15,7 +15,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { CreateWorkoutInput, ExerciseCatalogItem, MuscleGroupId } from "@fitfamily-ai/shared";
 import { MUSCLE_GROUPS } from "@fitfamily-ai/shared";
-import { AIHelperCard } from "@/components/AIHelperCard";
 import { AppButton } from "@/components/AppButton";
 import { Card } from "@/components/Card";
 import { MuscleMap } from "@/components/MuscleMap";
@@ -50,6 +49,32 @@ type DayDraft = {
   name: string;
   exercises: DayExerciseDraft[];
 };
+
+type WorkoutEditorDetail = {
+  id: string;
+  name: string;
+  description?: string | null;
+  goal?: string | null;
+  workoutDays?: Array<{
+    id: string;
+    name: string;
+    dayIndex: number;
+    workoutDayExercises?: Array<{
+      id: string;
+      exerciseId?: string | null;
+      orderIndex?: number | null;
+      targetSets?: number | null;
+      targetReps?: string | null;
+      targetWeight?: number | null;
+      restSeconds?: number | null;
+      notes?: string | null;
+      exercises?: { id?: string; name?: string } | null;
+    }>;
+  }>;
+};
+
+type WorkoutEditorDay = NonNullable<WorkoutEditorDetail["workoutDays"]>[number];
+type WorkoutEditorExerciseEntry = NonNullable<WorkoutEditorDay["workoutDayExercises"]>[number];
 
 type GoalValue =
   | "fuerza"
@@ -91,14 +116,6 @@ const experienceOptions: Array<{ value: ExperienceLevel; label: string; helper: 
   { value: "returning", label: "Vuelvo al gym", helper: "Volumen moderado para retomar sin apurarse." },
   { value: "intermediate", label: "Intermedio", helper: "Progresion normal con ejercicios principales." },
   { value: "advanced", label: "Avanzado", helper: "Mas volumen si ya dominas la tecnica." },
-];
-
-const aiPromptChips = [
-  "Sugiere una rutina completa segun mi objetivo",
-  "Estoy recien iniciando, hazla liviana 2 semanas",
-  "Hazla segura para volver al gimnasio",
-  "Prioriza ejercicios efectivos y faciles de progresar",
-  "Dame una version para entrenar con mi hija",
 ];
 
 const bodyPresetLabels: Array<{ value: BodyPreset; label: string }> = [
@@ -168,6 +185,9 @@ function focusTemplates(frequency: number): MuscleGroupId[][] {
 }
 
 export default function CreateWorkoutScreen() {
+  const { workoutId } = useLocalSearchParams<{ workoutId?: string }>();
+  const editingWorkoutId = Array.isArray(workoutId) ? workoutId[0] : workoutId;
+  const isEditMode = Boolean(editingWorkoutId);
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const profileId = useActiveProfileId();
@@ -193,6 +213,8 @@ export default function CreateWorkoutScreen() {
   const [activateOnSave, setActivateOnSave] = useState(true);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [loadingWorkout, setLoadingWorkout] = useState(false);
+  const [hydratedWorkoutId, setHydratedWorkoutId] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -212,6 +234,43 @@ export default function CreateWorkoutScreen() {
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!editingWorkoutId || loadingExercises || hydratedWorkoutId === editingWorkoutId) return;
+
+    let alive = true;
+    setLoadingWorkout(true);
+    setError(null);
+    api.workouts
+      .detail(editingWorkoutId)
+      .then((workout) => {
+        if (!alive) return;
+        const detail = workout as unknown as WorkoutEditorDetail;
+        const nextGoal = goalValueFromLabel(detail.goal);
+        const sortedDays = buildDraftDaysFromWorkout(detail, exerciseCatalog, nextGoal, experienceLevel);
+
+        setName(detail.name);
+        setDescription(detail.description ?? "");
+        setGoal(nextGoal);
+        setFrequency(sortedDays.length || 3);
+        setDays(sortedDays.length ? sortedDays : buildEmptyDays(3));
+        setSelectedDayIndex(0);
+        setStep(3);
+        setHydratedWorkoutId(editingWorkoutId);
+      })
+      .catch((caught) => {
+        if (!alive) return;
+        setError(caught instanceof Error ? caught.message : "No pude cargar la rutina para editar.");
+        setHydratedWorkoutId(editingWorkoutId);
+      })
+      .finally(() => {
+        if (alive) setLoadingWorkout(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [editingWorkoutId, exerciseCatalog, experienceLevel, hydratedWorkoutId, loadingExercises]);
 
   const goalLabel = goalOptions.find((option) => option.value === goal)?.label ?? "Objetivo";
   const durationLabel = durationOptions.find((option) => option.value === duration)?.label ?? "Duracion";
@@ -328,7 +387,7 @@ export default function CreateWorkoutScreen() {
     );
   }
 
-  function applyEvidenceTemplate() {
+  function applyEvidenceTemplate(targetStep: WizardStep = 3) {
     const suggestedDays = buildSuggestedWorkoutDays(exerciseCatalog, frequency, goal, experienceLevel);
     setDays(suggestedDays);
     setSelectedDayIndex(0);
@@ -345,39 +404,68 @@ export default function CreateWorkoutScreen() {
           .join("\n"),
       );
     }
-    setStep(3);
+    setStep(targetStep);
   }
 
-  async function askAi(prompt: string) {
-    if (!profileId) return;
+  async function generateCompleteWorkoutWithAi() {
+    if (loadingExercises || exerciseCatalog.length === 0) {
+      setAiResponse("Estoy cargando el catalogo de ejercicios. Intenta nuevamente en unos segundos.");
+      return;
+    }
+
     setAiLoading(true);
     setAiResponse(null);
+    setError(null);
+
+    const suggestedDays = buildSuggestedWorkoutDays(exerciseCatalog, frequency, goal, experienceLevel);
+    setDays(suggestedDays);
+    setSelectedDayIndex(0);
+    if (!name.trim()) setName(`${goalLabel} ${frequency} dias ${experienceLabel(experienceLevel)}`);
+    setDescription(
+      [
+        "Rutina creada automaticamente por FitFamily AI usando el catalogo priorizado por ejercicios efectivos, seguros y progresables.",
+        experienceLevel === "new" || experienceLevel === "returning"
+          ? "Primeras 2 semanas: fase liviana de adaptacion, tecnica limpia, RPE 6-7 y 2-3 repeticiones en reserva."
+          : "Progresion sugerida: cuando completes el rango alto de repeticiones con buena tecnica, sube levemente la carga.",
+        aiInstructions.trim() ? `Contexto personal considerado:\n${aiInstructions.trim()}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+
     try {
-      const topExercises = exerciseCatalog
-        .slice(0, 18)
-        .map((exercise) => `${exercise.name} (${exercise.tier}, score ${exercise.scienceScore})`)
-        .join(", ");
+      if (!profileId) return;
+      const summary = suggestedDays
+        .map(
+          (day) =>
+            `${day.name}: ${day.exercises
+              .map((exercise) => `${exercise.exerciseName} ${exercise.targetSets}x${exercise.targetReps}`)
+              .join(", ")}`,
+        )
+        .join("\n");
       const result = await api.ai.chat(
         profileId,
         [
-          prompt,
+          "Revisa esta rutina generada automaticamente por FitFamily AI antes de guardarla.",
           `Objetivo: ${goalLabel}. Frecuencia: ${frequency} dias por semana. Duracion: ${durationLabel}.`,
           `Nivel declarado: ${experienceLabel(experienceLevel)}.`,
           aiInstructions.trim()
-            ? `Instrucciones personales para la IA: ${aiInstructions.trim()}`
-            : "El usuario no agrego instrucciones personales adicionales.",
-          `Usa prioridad de ejercicios efectivos y seguros. Catalogo top disponible: ${topExercises}.`,
-          experienceLevel === "new" || experienceLevel === "returning"
-            ? "Si esta iniciando o volviendo al gimnasio, la rutina debe partir liviana por 2 semanas, con foco en tecnica y tolerancia."
-            : "Puede usar progresion normal si la tecnica ya esta dominada.",
-          "Responde con una propuesta por dias, series, repeticiones, descansos y una nota de seguridad. No inventes datos de salud.",
+            ? `Instrucciones personales del usuario: ${aiInstructions.trim()}`
+            : "Sin instrucciones personales adicionales.",
+          `Rutina propuesta:\n${summary}`,
+          "Entrega una revision breve en espanol: por que sirve, como partir la primera semana y advertencias de seguridad. Si el usuario menciona dolor o lesion, recomienda profesional.",
         ].join("\n"),
       );
       setAiResponse(result.message.content);
     } catch (caught) {
-      setAiResponse(caught instanceof Error ? caught.message : "No pude obtener una sugerencia IA.");
+      setAiResponse(
+        caught instanceof Error
+          ? `La rutina quedo creada como borrador, pero no pude obtener la revision IA: ${caught.message}`
+          : "La rutina quedo creada como borrador, pero no pude obtener la revision IA.",
+      );
     } finally {
       setAiLoading(false);
+      setStep(4);
     }
   }
 
@@ -388,22 +476,23 @@ export default function CreateWorkoutScreen() {
     return true;
   }
 
-  async function save() {
+  async function save(startAfterSave = false) {
     if (!profileId) return;
     setError(null);
     setSaving(true);
     try {
       const payload: CreateWorkoutInput = {
         name: name.trim(),
-        description:
-          [
-            description.trim(),
-            `Nivel declarado: ${experienceLabel(experienceLevel)}`,
-            aiInstructions.trim() ? `Instrucciones personales para IA:\n${aiInstructions.trim()}` : "",
-            `Duracion: ${durationLabel}`,
-          ]
-            .filter(Boolean)
-            .join("\n") || null,
+        description: isEditMode
+          ? description.trim() || null
+          : [
+              description.trim(),
+              `Nivel declarado: ${experienceLabel(experienceLevel)}`,
+              aiInstructions.trim() ? `Instrucciones personales para IA:\n${aiInstructions.trim()}` : "",
+              `Duracion: ${durationLabel}`,
+            ]
+              .filter(Boolean)
+              .join("\n") || null,
         goal: goalLabel,
         days: days.map((day) => ({
           dayIndex: day.dayIndex,
@@ -421,9 +510,16 @@ export default function CreateWorkoutScreen() {
         })),
       };
 
-      const created = await api.workouts.create(profileId, payload);
-      if (activateOnSave) setActiveWorkout(profileId, created.id);
-      router.replace("/workouts");
+      const saved =
+        isEditMode && editingWorkoutId
+          ? await api.workouts.update(editingWorkoutId, payload)
+          : await api.workouts.create(profileId, payload);
+      if (activateOnSave) setActiveWorkout(profileId, saved.id);
+      if (startAfterSave) {
+        router.replace({ pathname: "/workouts/log", params: { workoutId: saved.id } });
+      } else {
+        router.replace("/workouts");
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "No se pudo guardar la rutina.");
     } finally {
@@ -433,11 +529,14 @@ export default function CreateWorkoutScreen() {
 
   return (
     <Screen>
-      <Title>Crear rutina</Title>
+      <Title>{isEditMode ? "Editar rutina" : "Crear rutina"}</Title>
       <Subtitle>
-        Construye una rutina con ejercicios priorizados por efectividad, seguridad y facilidad de progresion.
+        {isEditMode
+          ? "Modifica dias, ejercicios, series, repeticiones, descanso y notas de tu rutina."
+          : "Construye una rutina con ejercicios priorizados por efectividad, seguridad y facilidad de progresion."}
       </Subtitle>
       <StepIndicator step={step} />
+      {loadingWorkout ? <LoadingState label="Cargando rutina..." /> : null}
 
       {step === 1 ? (
         <View style={styles.stack}>
@@ -489,18 +588,16 @@ export default function CreateWorkoutScreen() {
               ))}
             </View>
             <Text style={styles.label}>Duracion</Text>
-            <View style={styles.durationCol}>
+            <View style={styles.chipsRow}>
               {durationOptions.map((option) => (
                 <Pressable
                   key={option.value}
                   onPress={() => setDuration(option.value)}
-                  style={[styles.durationRow, duration === option.value ? styles.durationActive : null]}
+                  style={[styles.chip, duration === option.value ? styles.chipActive : null]}
                 >
-                  <View style={styles.durationText}>
-                    <Text style={styles.durationLabel}>{option.label}</Text>
-                    <Text style={styles.durationHelper}>{option.helper}</Text>
-                  </View>
-                  {duration === option.value ? <Check size={18} color={colors.primary} /> : null}
+                  <Text style={[styles.chipText, duration === option.value ? styles.chipTextActive : null]}>
+                    {option.label}
+                  </Text>
                 </Pressable>
               ))}
             </View>
@@ -522,28 +619,32 @@ export default function CreateWorkoutScreen() {
             <Text style={styles.aiInstructionsHint}>
               Si estas recien iniciando, la app baja volumen e intensidad para una fase de adaptacion antes de progresar.
             </Text>
+            <Text style={styles.label}>Dias por semana</Text>
+            <View style={styles.chipsRow}>
+              {frequencyOptions.map((value) => (
+                <Pressable
+                  key={`quick-${value}`}
+                  onPress={() => applyFrequency(value)}
+                  style={[styles.chip, frequency === value ? styles.chipActive : null]}
+                >
+                  <Text style={[styles.chipText, frequency === value ? styles.chipTextActive : null]}>
+                    {value} dias
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <AppButton
+              label="IA arma mi rutina completa"
+              icon={Sparkles}
+              loading={aiLoading}
+              disabled={loadingExercises}
+              onPress={generateCompleteWorkoutWithAi}
+            />
+            <Text style={styles.aiInstructionsHint}>
+              La IA usa tu objetivo, nivel y notas personales para armar un borrador que puedes revisar y editar
+              antes de guardar. Si prefieres armarla tu, sigue con los pasos.
+            </Text>
           </Card>
-
-          <AIHelperCard
-            title="Coach IA para partir mejor"
-            subtitle="Pidele una rutina completa. La app la deja como borrador para revisar antes de guardar."
-            chips={aiPromptChips}
-            onAsk={askAi}
-            response={aiResponse}
-            loading={aiLoading}
-            actions={
-              aiResponse && !aiLoading
-                ? [
-                    {
-                      label: "Aplicar rutina sugerida",
-                      variant: "primary",
-                      onPress: applyEvidenceTemplate,
-                    },
-                    { label: "Descartar", variant: "ghost", onPress: () => setAiResponse(null) },
-                  ]
-                : []
-            }
-          />
         </View>
       ) : null}
 
@@ -568,7 +669,7 @@ export default function CreateWorkoutScreen() {
             label="Generar rutina completa sugerida"
             icon={Sparkles}
             variant="secondary"
-            onPress={applyEvidenceTemplate}
+            onPress={() => applyEvidenceTemplate()}
           />
           <Text style={styles.label}>Nombres de los dias</Text>
           {days.map((day, index) => (
@@ -691,6 +792,12 @@ export default function CreateWorkoutScreen() {
           <BodyText>
             <Text style={styles.bold}>{name || "Sin nombre"}</Text> - {goalLabel} - {durationLabel}
           </BodyText>
+          {aiResponse ? (
+            <View style={styles.aiReviewBox}>
+              <Text style={styles.aiReviewTitle}>Revision IA</Text>
+              <BodyText>{aiResponse}</BodyText>
+            </View>
+          ) : null}
           {days.map((day, index) => (
             <View key={day.dayIndex} style={styles.reviewDay}>
               <Text style={styles.reviewDayTitle}>
@@ -716,7 +823,19 @@ export default function CreateWorkoutScreen() {
             <Text style={styles.activeText}>Marcar como rutina activa al guardar</Text>
           </Pressable>
           {error ? <Text style={styles.error}>{error}</Text> : null}
-          <AppButton label="Guardar rutina" icon={Save} loading={saving} onPress={save} />
+          <AppButton
+            label={isEditMode ? "Guardar cambios" : "Guardar rutina"}
+            icon={Save}
+            loading={saving}
+            onPress={() => save(false)}
+          />
+          <AppButton
+            label="Guardar y empezar entrenamiento"
+            icon={Sparkles}
+            variant="secondary"
+            disabled={saving}
+            onPress={() => save(true)}
+          />
         </Card>
       ) : null}
 
@@ -899,6 +1018,65 @@ function StepIndicator({ step }: { step: number }) {
   );
 }
 
+function buildDraftDaysFromWorkout(
+  workout: WorkoutEditorDetail,
+  catalog: ExerciseCatalogItem[],
+  goal: GoalValue,
+  experienceLevel: ExperienceLevel,
+): DayDraft[] {
+  return (workout.workoutDays ?? [])
+    .slice()
+    .sort((a, b) => a.dayIndex - b.dayIndex)
+    .map((day, dayIndex) => ({
+      dayIndex,
+      name: day.name || `Dia ${dayIndex + 1}`,
+      exercises: (day.workoutDayExercises ?? [])
+        .slice()
+        .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
+        .map((entry, exerciseIndex) =>
+          createExerciseDraftFromWorkoutEntry(entry, exerciseIndex, catalog, goal, experienceLevel),
+        ),
+    }));
+}
+
+function createExerciseDraftFromWorkoutEntry(
+  entry: WorkoutEditorExerciseEntry,
+  orderIndex: number,
+  catalog: ExerciseCatalogItem[],
+  goal: GoalValue,
+  experienceLevel: ExperienceLevel,
+): DayExerciseDraft {
+  const exerciseId = entry.exerciseId ?? entry.exercises?.id ?? "";
+  const catalogItem = catalog.find((exercise) => exercise.id === exerciseId);
+  const base = catalogItem
+    ? createExerciseDraft(catalogItem, orderIndex, goal, experienceLevel)
+    : {
+        exerciseId,
+        exerciseName: entry.exercises?.name ?? "Ejercicio",
+        orderIndex,
+        targetSets: "",
+        targetReps: "",
+        restSeconds: "",
+        targetWeight: "",
+        notes: "",
+        score: 45,
+        tier: "situacional",
+        muscles: [],
+      };
+
+  return {
+    ...base,
+    exerciseId,
+    exerciseName: catalogItem?.name ?? entry.exercises?.name ?? base.exerciseName,
+    orderIndex,
+    targetSets: entry.targetSets == null ? "" : String(entry.targetSets),
+    targetReps: entry.targetReps ?? "",
+    restSeconds: entry.restSeconds == null ? "" : String(entry.restSeconds),
+    targetWeight: entry.targetWeight == null ? "" : String(entry.targetWeight),
+    notes: entry.notes ?? "",
+  };
+}
+
 function buildEmptyDays(frequency: number): DayDraft[] {
   return dayNameTemplates(frequency).map((dayName, index) => ({
     dayIndex: index,
@@ -998,6 +1176,14 @@ function experienceLabel(level: ExperienceLevel): string {
   return experienceOptions.find((option) => option.value === level)?.label ?? "Intermedio";
 }
 
+function goalValueFromLabel(value?: string | null): GoalValue {
+  const normalized = value?.trim().toLowerCase();
+  return (
+    goalOptions.find((option) => option.value === normalized || option.label.toLowerCase() === normalized)
+      ?.value ?? "otro"
+  );
+}
+
 function muscleLabel(id: MuscleGroupId): string {
   return MUSCLE_GROUPS.find((muscle) => muscle.id === id)?.label ?? id;
 }
@@ -1082,13 +1268,15 @@ function makeStyles(colors: ColorPalette) {
     inputMultiline: { minHeight: 74, textAlignVertical: "top", paddingVertical: 10 },
     aiInstructionsInput: { minHeight: 118, textAlignVertical: "top", paddingVertical: 12 },
     aiInstructionsHint: { color: colors.muted, fontSize: 12, lineHeight: 17 },
-    optionGrid: { gap: 8 },
+    optionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     optionCard: {
+      flexBasis: "47%",
+      flexGrow: 1,
       borderRadius: radius.sm,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.backgroundElevated,
-      padding: 12,
+      padding: 10,
       gap: 2,
     },
     optionActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
@@ -1231,6 +1419,15 @@ function makeStyles(colors: ColorPalette) {
     addButtonTextDisabled: { color: colors.muted },
     reviewDay: { gap: 4 },
     reviewDayTitle: { color: colors.text, fontWeight: "900" },
+    aiReviewBox: {
+      gap: 6,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.primary,
+      backgroundColor: colors.primarySoft,
+      padding: 12,
+    },
+    aiReviewTitle: { color: colors.primary, fontSize: 13, fontWeight: "900" },
     bold: { fontWeight: "900" },
     activeToggle: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8 },
     checkbox: {

@@ -35,12 +35,21 @@ export class DashboardService {
     }
 
     const mealRows = meals.data ?? [];
-    const calories = mealRows
-      .map((meal) => Number(meal.calories))
-      .filter((value) => Number.isFinite(value));
-    const proteins = mealRows
-      .map((meal) => Number(meal.protein_g))
-      .filter((value) => Number.isFinite(value));
+
+    // Promedios DIARIOS (no por comida): agrupamos las comidas por dia.
+    const totalsByDay = new Map<string, { calories: number; protein: number }>();
+    for (const meal of mealRows) {
+      const key = String(meal.eaten_at).slice(0, 10);
+      const entry = totalsByDay.get(key) ?? { calories: 0, protein: 0 };
+      const mealCalories = Number(meal.calories);
+      const mealProtein = Number(meal.protein_g);
+      if (Number.isFinite(mealCalories)) entry.calories += mealCalories;
+      if (Number.isFinite(mealProtein)) entry.protein += mealProtein;
+      totalsByDay.set(key, entry);
+    }
+    const dailyTotals = [...totalsByDay.values()];
+    const calories = dailyTotals.map((entry) => entry.calories);
+    const proteins = dailyTotals.map((entry) => entry.protein);
 
     const logsForProgress = await this.data.client
       .from("workout_logs")
@@ -92,10 +101,10 @@ export class DashboardService {
 
     const alerts: string[] = [];
     if ((workoutLogs.data?.length ?? 0) === 0) {
-      alerts.push("No hay entrenamientos registrados en los ultimos 7 dias.");
+      alerts.push("No hay entrenamientos registrados en los últimos 7 días.");
     }
     if (mealRows.length === 0) {
-      alerts.push("No hay comidas registradas esta semana; el dashboard nutricional sera limitado.");
+      alerts.push("No hay comidas registradas esta semana; el dashboard nutricional será limitado.");
     }
 
     return {

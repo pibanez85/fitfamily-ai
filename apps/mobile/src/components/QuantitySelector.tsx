@@ -125,6 +125,9 @@ function makeStyles(colors: ColorPalette) {
     },
     qtyInput: {
       flex: 1,
+      // En web los <input> tienen ancho minimo intrinseco (~266px) y sin esto
+      // empujan el boton "+" fuera de la tarjeta en pantallas angostas.
+      minWidth: 0,
       minHeight: 46,
       textAlign: "center",
       borderRadius: radius.sm,
