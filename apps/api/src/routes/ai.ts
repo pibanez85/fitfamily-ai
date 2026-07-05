@@ -4,6 +4,7 @@ import {
   profileIdParamSchema,
 } from "@fitfamily-ai/shared";
 import { Router } from "express";
+import { aiRateLimiter } from "../middleware/rateLimit";
 import { validateBody, validateParams } from "../middleware/validate";
 import type { AIComparisonService } from "../services/ai/AIComparisonService";
 import type { AIProvider } from "../services/ai/types";
@@ -21,6 +22,9 @@ export function createAIRouter(input: {
   aiArena: AIComparisonService;
 }) {
   const router = Router();
+
+  // Todas las rutas de IA comparten el limite de tasa (protegen el gasto OpenAI).
+  router.use("/profiles/:profileId/ai", aiRateLimiter);
 
   router.post(
     "/profiles/:profileId/ai/analyze-food-photo",

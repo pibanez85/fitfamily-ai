@@ -47,6 +47,10 @@ export function createApp(env: Env) {
     new AIFoodEstimateProvider(aiProvider),
   ]);
 
+  // Render (y la mayoria de PaaS) ponen la app detras de un proxy: confiar en
+  // el primer salto permite detectar la IP real (logs + rate limit).
+  app.set("trust proxy", 1);
+
   app.use(helmet());
   app.use(cors());
   app.use(express.json({ limit: "2mb" }));
