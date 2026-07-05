@@ -100,8 +100,10 @@ async function pickImageFromLibrary() {
     throw new Error("Necesitas permiso para seleccionar fotos.");
   }
 
+  // Sin allowsEditing: el editor de recorte de Android (pantalla "CORTAR")
+  // confunde y en algunos equipos nunca devuelve la imagen. La app ya
+  // redimensiona y comprime sola antes de subir.
   return ImagePicker.launchImageLibraryAsync({
-    allowsEditing: true,
     quality: 0.82,
     // SDK 56: MediaTypeOptions fue removido. Ahora se usa un arreglo de strings.
     mediaTypes: ["images"],
@@ -116,7 +118,6 @@ async function takeImageFromCamera() {
   }
 
   return ImagePicker.launchCameraAsync({
-    allowsEditing: true,
     cameraType: ImagePicker.CameraType.back,
     exif: false,
     quality: 0.82,
