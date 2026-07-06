@@ -9,7 +9,8 @@ Esta carpeta contiene la documentacion operativa y tecnica de FitFamily AI.
 3. [Solucion de problemas](TROUBLESHOOTING.md)
 4. [Android privado: primera salida a produccion](ANDROID_PRIVATE_RELEASE.md)
 5. [Generar y compartir el APK (proceso real)](COMPARTIR_APK.md)
-6. [Deploy economico en Render](RENDER_DEPLOYMENT.md)
+6. [Registro de cambios / proxima version](../CHANGELOG.md)
+7. [Deploy economico en Render](RENDER_DEPLOYMENT.md)
 6. [Google Play Android](GOOGLE_PLAY_ANDROID.md)
 7. [Borrador politica de privacidad](PRIVACY_POLICY_DRAFT.md)
 
