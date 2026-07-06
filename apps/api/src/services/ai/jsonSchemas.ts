@@ -94,3 +94,40 @@ export const gymMachineAnalysisJsonSchema = {
     disclaimer: { type: "string" },
   },
 } as const;
+
+export const generatedWorkoutJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["summary", "days"],
+  properties: {
+    summary: { type: "string" },
+    days: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["name", "exercises"],
+        properties: {
+          name: { type: "string" },
+          exercises: {
+            type: "array",
+            minItems: 1,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["exerciseId", "targetSets", "targetReps", "restSeconds", "notes"],
+              properties: {
+                exerciseId: { type: "string" },
+                targetSets: { type: "integer", minimum: 1, maximum: 10 },
+                targetReps: { type: "string" },
+                restSeconds: { type: "integer", minimum: 0, maximum: 600 },
+                notes: { type: "string" },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const;

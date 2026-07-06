@@ -14,6 +14,8 @@ import {
   type CreateProfileInput,
   type CreateWorkoutInput,
   type CreateWorkoutLogInput,
+  type GenerateWorkoutRequest,
+  type GeneratedWorkout,
   type UpdateWorkoutInput,
   type DashboardResponse,
   type FoodPhotoAnalysis,
@@ -829,5 +831,40 @@ export const demoApi = {
     analyzeMachine: async (): Promise<GymMachineAnalysis> => machineAnalysis(),
     chat: async (profileId: string, message: string): Promise<AIChatResult> =>
       chatReply(profileId, message),
+    generateWorkout: async (_profileId: string, body: GenerateWorkoutRequest): Promise<GeneratedWorkout> =>
+      buildDemoGeneratedWorkout(body),
   },
 };
+
+// Generacion de rutina en modo demo (sin IA real): reparte el catalogo por dias.
+function buildDemoGeneratedWorkout(body: GenerateWorkoutRequest): GeneratedWorkout {
+  const goal = body.goal.toLowerCase();
+  const targetReps = /fuerza/.test(goal) ? "4-6" : /resist/.test(goal) ? "12-15" : "8-12";
+  const restSeconds = /fuerza/.test(goal) ? 150 : /resist/.test(goal) ? 45 : 90;
+  const perDay = body.frequency >= 5 ? 4 : 5;
+  const dayNames = ["Dia A", "Dia B", "Dia C", "Dia D", "Dia E", "Dia F"];
+
+  const workoutDays = Array.from({ length: body.frequency }, (_, dayIndex) => {
+    const chosen = exercises.filter((_, index) => index % body.frequency === dayIndex).slice(0, perDay);
+    return {
+      name: dayNames[dayIndex] ?? `Dia ${dayIndex + 1}`,
+      dayIndex,
+      workoutDayExercises: chosen.map((exercise, orderIndex) => ({
+        exerciseId: exercise.id,
+        orderIndex,
+        targetSets: 3,
+        targetReps,
+        restSeconds,
+        targetWeight: null,
+        notes: null,
+        exercises: { id: exercise.id, name: exercise.name },
+      })),
+    };
+  });
+
+  return {
+    summary:
+      "Rutina base creada en modo demo. Reparte ejercicios efectivos por dias segun tu objetivo; revisala y ajustala antes de guardar.",
+    workoutDays,
+  };
+}

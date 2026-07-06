@@ -11,6 +11,9 @@ import type {
   CreateWorkoutLogSchema,
   CreateWorkoutSchema,
   DashboardResponseSchema,
+  GenerateWorkoutRequestSchema,
+  GeneratedWorkoutSchema,
+  WorkoutBuilderCatalogItemSchema,
   ExerciseSchema,
   FoodItemSchema,
   FoodSearchResponseSchema,
@@ -65,6 +68,10 @@ export type AIChatRequest = z.infer<typeof AIChatRequestSchema>;
 export type AIChatResult = z.infer<typeof AIChatApiResponseSchema>;
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 export type DashboardResponse = z.infer<typeof DashboardResponseSchema>;
+
+export type WorkoutBuilderCatalogItem = z.infer<typeof WorkoutBuilderCatalogItemSchema>;
+export type GenerateWorkoutRequest = z.infer<typeof GenerateWorkoutRequestSchema>;
+export type GeneratedWorkout = z.infer<typeof GeneratedWorkoutSchema>;
 
 export type AIProviderName = "openai" | "mock" | "anthropic";
 

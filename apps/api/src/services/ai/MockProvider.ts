@@ -4,9 +4,17 @@ import {
   HEALTH_DISCLAIMER,
   type AIProviderResult,
   type FoodAnalysisResult,
+  type GeneratedWorkout,
   type GymMachineAnalysisResult,
 } from "@fitfamily-ai/shared";
-import type { AIChatInput, AIChatProviderResult, AIProvider, AnalyzePhotoInput } from "./types";
+import type {
+  AIChatInput,
+  AIChatProviderResult,
+  AIProvider,
+  AnalyzePhotoInput,
+  GenerateWorkoutInput,
+} from "./types";
+import { buildMockWorkout } from "./workoutBuilder";
 
 export class MockProvider implements AIProvider {
   readonly name = "mock" as const;
@@ -93,6 +101,16 @@ export class MockProvider implements AIProvider {
       data: {
         content: `Tengo el contexto del perfil y puedo ayudarte a revisar la rutina. Modo mock activo: conecta OpenAI para respuestas reales. ${HEALTH_DISCLAIMER}\n\nTu mensaje: ${input.message}`,
       },
+    };
+  }
+
+  async generateWorkout(input: GenerateWorkoutInput): Promise<AIProviderResult<GeneratedWorkout>> {
+    const started = Date.now();
+    return {
+      provider: this.name,
+      model: "local-mock",
+      latencyMs: Date.now() - started,
+      data: buildMockWorkout(input),
     };
   }
 }

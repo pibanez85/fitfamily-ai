@@ -2,7 +2,9 @@ import type {
   AIProviderName,
   AIProviderResult,
   FoodAnalysisResult,
+  GeneratedWorkout,
   GymMachineAnalysisResult,
+  WorkoutBuilderCatalogItem,
 } from "@fitfamily-ai/shared";
 
 export type AnalyzePhotoInput = {
@@ -22,6 +24,16 @@ export type AIChatProviderResult = {
   content: string;
 };
 
+export type GenerateWorkoutInput = {
+  profileId: string;
+  goal: string;
+  frequency: number;
+  experienceLevel: string;
+  durationLabel?: string;
+  instructions?: string;
+  catalog: WorkoutBuilderCatalogItem[];
+};
+
 export interface AIProvider {
   readonly name: AIProviderName;
   analyzeFoodPhoto(input: AnalyzePhotoInput): Promise<AIProviderResult<FoodAnalysisResult>>;
@@ -29,4 +41,5 @@ export interface AIProvider {
     input: AnalyzePhotoInput,
   ): Promise<AIProviderResult<GymMachineAnalysisResult>>;
   chat(input: AIChatInput): Promise<AIProviderResult<AIChatProviderResult>>;
+  generateWorkout(input: GenerateWorkoutInput): Promise<AIProviderResult<GeneratedWorkout>>;
 }

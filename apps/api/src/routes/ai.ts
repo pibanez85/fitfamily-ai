@@ -1,6 +1,7 @@
 import {
   AIChatRequestSchema,
   AnalyzePhotoRequestSchema,
+  GenerateWorkoutRequestSchema,
   profileIdParamSchema,
 } from "@fitfamily-ai/shared";
 import { Router } from "express";
@@ -107,6 +108,30 @@ export function createAIRouter(input: {
           analysisId: analysis.id,
           ...result.data,
         });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    "/profiles/:profileId/ai/generate-workout",
+    validateParams(profileIdParamSchema),
+    validateBody(GenerateWorkoutRequestSchema),
+    async (req, res, next) => {
+      try {
+        const profileId = getParam(req, "profileId");
+        await input.ownership.assertProfile(profileId, requireUserId(req));
+        const result = await input.aiProvider.generateWorkout({
+          profileId,
+          goal: req.body.goal,
+          frequency: req.body.frequency,
+          experienceLevel: req.body.experienceLevel,
+          durationLabel: req.body.durationLabel ?? undefined,
+          instructions: req.body.instructions ?? undefined,
+          catalog: req.body.catalog,
+        });
+        res.json(result.data);
       } catch (error) {
         next(error);
       }
