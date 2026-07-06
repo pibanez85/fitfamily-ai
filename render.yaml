@@ -2,7 +2,7 @@ services:
   - type: web
     name: fitfamily-ai-api
     runtime: node
-    plan: free
+    plan: starter
     region: oregon
     healthCheckPath: /health
     buildCommand: npx pnpm@11.3.0 install --frozen-lockfile && npx pnpm@11.3.0 --filter @fitfamily-ai/api build
