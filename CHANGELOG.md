@@ -43,6 +43,8 @@ a una sección con la fecha.
 ### Correcciones
 - **Subir foto desde galería/cámara en Android**: ya no se queda pegado en la
   pantalla de recortar ni falla la subida a Storage.
+- **Fecha de nacimiento** más simple: se escribe directo (DD/MM/AAAA) y muestra
+  la edad al instante; se quitó el calendario y el selector de años.
 
 ### Servidor / IA — ya activo (sin reinstalar)
 - **Coach IA más obediente**: sigue mejor lo que pide el usuario.
