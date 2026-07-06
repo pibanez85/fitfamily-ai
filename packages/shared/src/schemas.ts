@@ -374,3 +374,43 @@ export const DashboardResponseSchema = z.object({
   ),
   alerts: z.array(z.string()),
 });
+
+// --- Generacion de rutina con IA ---------------------------------------------
+
+export const WorkoutBuilderCatalogItemSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  muscles: z.array(z.string()).default([]),
+  equipment: z.string().nullable().optional(),
+});
+
+export const GenerateWorkoutRequestSchema = z.object({
+  goal: z.string().trim().min(1).max(80),
+  frequency: z.number().int().min(1).max(6),
+  experienceLevel: z.string().trim().max(60).default("intermedio"),
+  durationLabel: z.string().trim().max(80).nullable().optional(),
+  instructions: z.string().trim().max(2000).nullable().optional(),
+  catalog: z.array(WorkoutBuilderCatalogItemSchema).min(1).max(200),
+});
+
+export const GeneratedWorkoutExerciseSchema = z.object({
+  exerciseId: z.string(),
+  orderIndex: z.number().int().min(0),
+  targetSets: z.number().int().min(1).max(10).nullable(),
+  targetReps: z.string().nullable(),
+  restSeconds: z.number().int().min(0).max(600).nullable(),
+  targetWeight: z.number().nullable(),
+  notes: z.string().nullable(),
+  exercises: z.object({ id: z.string(), name: z.string() }).nullable(),
+});
+
+export const GeneratedWorkoutDaySchema = z.object({
+  name: z.string(),
+  dayIndex: z.number().int().min(0),
+  workoutDayExercises: z.array(GeneratedWorkoutExerciseSchema),
+});
+
+export const GeneratedWorkoutSchema = z.object({
+  summary: z.string(),
+  workoutDays: z.array(GeneratedWorkoutDaySchema),
+});

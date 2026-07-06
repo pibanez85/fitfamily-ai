@@ -5,14 +5,31 @@ import {
   GymMachineAnalysisResultSchema,
   type AIProviderResult,
   type FoodAnalysisResult,
+  type GeneratedWorkout,
   type GymMachineAnalysisResult,
 } from "@fitfamily-ai/shared";
 import OpenAI from "openai";
 import { AppError } from "../../utils/AppError";
-import { foodAnalysisJsonSchema, gymMachineAnalysisJsonSchema } from "./jsonSchemas";
+import {
+  foodAnalysisJsonSchema,
+  generatedWorkoutJsonSchema,
+  gymMachineAnalysisJsonSchema,
+} from "./jsonSchemas";
 import { parseStructuredJson } from "./parse";
-import { chatSystemPrompt, foodAnalysisSystemPrompt, gymMachineSystemPrompt } from "./prompts";
-import type { AIChatInput, AIChatProviderResult, AIProvider, AnalyzePhotoInput } from "./types";
+import {
+  chatSystemPrompt,
+  foodAnalysisSystemPrompt,
+  gymMachineSystemPrompt,
+  workoutBuilderSystemPrompt,
+} from "./prompts";
+import type {
+  AIChatInput,
+  AIChatProviderResult,
+  AIProvider,
+  AnalyzePhotoInput,
+  GenerateWorkoutInput,
+} from "./types";
+import { GeneratedWorkoutRawSchema, enrichGeneratedWorkout } from "./workoutBuilder";
 
 export class OpenAIProvider implements AIProvider {
   readonly name = "openai" as const;
@@ -153,6 +170,58 @@ Usa este disclaimer exacto: ${GYM_MACHINE_DISCLAIMER}`,
       model: this.modelText,
       latencyMs: Date.now() - started,
       data: { content },
+      rawResponse: response,
+    };
+  }
+
+  async generateWorkout(input: GenerateWorkoutInput): Promise<AIProviderResult<GeneratedWorkout>> {
+    const started = Date.now();
+    const catalogText = input.catalog
+      .map(
+        (item) =>
+          `${item.id} | ${item.name} | musculos: ${item.muscles.join(", ") || "varios"} | equipo: ${item.equipment ?? "variable"}`,
+      )
+      .join("\n");
+
+    const userText = [
+      `Objetivo: ${input.goal}.`,
+      `Frecuencia: ${input.frequency} dias por semana (crea EXACTAMENTE ${input.frequency} dias).`,
+      `Nivel del usuario: ${input.experienceLevel}.`,
+      input.durationLabel ? `Duracion del plan: ${input.durationLabel}.` : "",
+      input.instructions?.trim()
+        ? `Peticion e instrucciones del usuario (PRIORIDAD MAXIMA, respetalas al pie de la letra): ${input.instructions.trim()}`
+        : "El usuario no agrego instrucciones adicionales.",
+      "",
+      "Catalogo de ejercicios permitidos. Usa SOLO estos y copia el exerciseId EXACTO de la primera columna:",
+      catalogText,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const response = (await this.client.responses.create({
+      model: this.modelText,
+      input: [
+        { role: "system", content: [{ type: "input_text", text: workoutBuilderSystemPrompt }] },
+        { role: "user", content: [{ type: "input_text", text: userText }] },
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "generated_workout",
+          schema: generatedWorkoutJsonSchema,
+          strict: true,
+        },
+      },
+    } as any)) as any;
+
+    const raw = parseStructuredJson(response.output_text ?? "", GeneratedWorkoutRawSchema);
+    const data = enrichGeneratedWorkout(raw, input);
+
+    return {
+      provider: this.name,
+      model: this.modelText,
+      latencyMs: Date.now() - started,
+      data,
       rawResponse: response,
     };
   }

@@ -11,6 +11,8 @@ import type {
   FoodCatalogItem,
   FoodSearchResponse,
   FoodPhotoAnalysis,
+  GenerateWorkoutRequest,
+  GeneratedWorkout,
   GymMachineAnalysis,
   Meal,
   Profile,
@@ -176,6 +178,11 @@ const realApi = {
         method: "POST",
         body: JSON.stringify({ message, threadId }),
       }),
+    generateWorkout: (profileId: string, body: Omit<GenerateWorkoutRequest, never>) =>
+      request<GeneratedWorkout>(`/profiles/${profileId}/ai/generate-workout`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }, 60000),
   },
 };
 

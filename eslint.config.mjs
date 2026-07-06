@@ -8,6 +8,7 @@ export default [
       "**/dist/**",
       "**/.expo/**",
       "**/.claude/**",
+      "**/scripts/**",
       "**/coverage/**",
       "apps/mobile/.expo/**",
       "apps/mobile/babel.config.js",

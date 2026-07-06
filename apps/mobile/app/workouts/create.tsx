@@ -412,58 +412,66 @@ export default function CreateWorkoutScreen() {
       setAiResponse("Estoy cargando el catalogo de ejercicios. Intenta nuevamente en unos segundos.");
       return;
     }
+    if (!profileId) return;
 
     setAiLoading(true);
     setAiResponse(null);
     setError(null);
 
-    const suggestedDays = buildSuggestedWorkoutDays(exerciseCatalog, frequency, goal, experienceLevel);
-    setDays(suggestedDays);
-    setSelectedDayIndex(0);
-    if (!name.trim()) setName(`${goalLabel} ${frequency} dias ${experienceLabel(experienceLevel)}`);
-    setDescription(
-      [
-        "Rutina creada automaticamente por FitFamily AI usando el catalogo priorizado por ejercicios efectivos, seguros y progresables.",
-        experienceLevel === "new" || experienceLevel === "returning"
-          ? "Primeras 2 semanas: fase liviana de adaptacion, tecnica limpia, RPE 6-7 y 2-3 repeticiones en reserva."
-          : "Progresion sugerida: cuando completes el rango alto de repeticiones con buena tecnica, sube levemente la carga.",
-        aiInstructions.trim() ? `Contexto personal considerado:\n${aiInstructions.trim()}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    );
+    const applyFallback = () => {
+      setDays(buildSuggestedWorkoutDays(exerciseCatalog, frequency, goal, experienceLevel));
+    };
 
     try {
-      if (!profileId) return;
-      const summary = suggestedDays
-        .map(
-          (day) =>
-            `${day.name}: ${day.exercises
-              .map((exercise) => `${exercise.exerciseName} ${exercise.targetSets}x${exercise.targetReps}`)
-              .join(", ")}`,
-        )
-        .join("\n");
-      const result = await api.ai.chat(
-        profileId,
-        [
-          "Revisa esta rutina generada automaticamente por FitFamily AI antes de guardarla.",
-          `Objetivo: ${goalLabel}. Frecuencia: ${frequency} dias por semana. Duracion: ${durationLabel}.`,
-          `Nivel declarado: ${experienceLabel(experienceLevel)}.`,
-          aiInstructions.trim()
-            ? `Instrucciones personales del usuario: ${aiInstructions.trim()}`
-            : "Sin instrucciones personales adicionales.",
-          `Rutina propuesta:\n${summary}`,
-          "Entrega una revision breve en espanol: por que sirve, como partir la primera semana y advertencias de seguridad. Si el usuario menciona dolor o lesion, recomienda profesional.",
-        ].join("\n"),
-      );
-      setAiResponse(result.message.content);
+      // La IA arma la rutina de verdad a partir del objetivo, nivel y el texto
+      // libre del usuario, eligiendo solo ejercicios de este catalogo.
+      const catalog = exerciseCatalog.slice(0, 140).map((exercise) => ({
+        id: exercise.id,
+        name: exercise.name,
+        muscles: (exercise.muscleGroupIds ?? []).map(muscleLabel),
+        equipment: exercise.libraryEquipment ?? exercise.equipment ?? null,
+      }));
+
+      const result = await api.ai.generateWorkout(profileId, {
+        goal: goalLabel,
+        frequency,
+        experienceLevel: experienceLabel(experienceLevel),
+        durationLabel,
+        instructions: aiInstructions.trim() || null,
+        catalog,
+      });
+
+      const detail = { workoutDays: result.workoutDays } as unknown as WorkoutEditorDetail;
+      const aiDays = buildDraftDaysFromWorkout(detail, exerciseCatalog, goal, experienceLevel)
+        .filter((day) => day.exercises.length > 0)
+        .map((day, index) => ({ ...day, dayIndex: index }));
+
+      if (aiDays.length === 0) {
+        applyFallback();
+        setAiResponse(
+          "La IA no pudo armar la rutina esta vez; use el generador por evidencia como respaldo. Revisala y ajustala.",
+        );
+      } else {
+        setDays(aiDays);
+        setAiResponse(result.summary);
+      }
     } catch (caught) {
+      applyFallback();
       setAiResponse(
         caught instanceof Error
-          ? `La rutina quedo creada como borrador, pero no pude obtener la revision IA: ${caught.message}`
-          : "La rutina quedo creada como borrador, pero no pude obtener la revision IA.",
+          ? `No pude generar con IA (${caught.message}). Use el generador por evidencia como respaldo.`
+          : "No pude generar con IA. Use el generador por evidencia como respaldo.",
       );
     } finally {
+      if (!name.trim()) setName(`${goalLabel} ${frequency} dias ${experienceLabel(experienceLevel)}`);
+      if (!description.trim()) {
+        setDescription(
+          aiInstructions.trim()
+            ? `Rutina personalizada por IA. Contexto: ${aiInstructions.trim()}`
+            : "Rutina personalizada por IA segun tu objetivo y nivel.",
+        );
+      }
+      setSelectedDayIndex(0);
       setAiLoading(false);
       setStep(4);
     }
