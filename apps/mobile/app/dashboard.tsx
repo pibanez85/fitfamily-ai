@@ -1,5 +1,17 @@
-import { router, useFocusEffect } from "expo-router";
-import { Beef, Camera, Dumbbell, Flame, Ruler, Scale, Settings, Utensils, Watch } from "lucide-react-native";
+import { router, useFocusEffect, type Href } from "expo-router";
+import {
+  Beef,
+  Bot,
+  Camera,
+  ChevronRight,
+  Dumbbell,
+  Flame,
+  Ruler,
+  Scale,
+  Settings,
+  Utensils,
+  Watch,
+} from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import { ImageBackground, Pressable, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -15,15 +27,60 @@ import type { ColorPalette } from "@/theme/colors";
 import { useTheme } from "@/theme/theme";
 import { gymImages } from "@/theme/images";
 
-// Solo accesos que no estan ya en la barra inferior (Entreno, Comida, Coach).
+type DashboardIcon = typeof Dumbbell;
+type ActionTone = "primary" | "energy" | "accent" | "success" | "neutral";
+type DashboardAction = {
+  label: string;
+  description: string;
+  href: Href;
+  icon: DashboardIcon;
+  tone: ActionTone;
+};
+
 const actions = [
-  { label: "Rutina de hoy", href: "/today", icon: Dumbbell },
-  { label: "Foto comida", href: "/meals/photo", icon: Camera },
-  { label: "Foto máquina", href: "/machines/photo", icon: Camera },
-  { label: "Peso y medidas", href: "/body-metrics", icon: Ruler },
-  { label: "Reloj", href: "/wearables", icon: Watch },
-  { label: "Ajustes", href: "/settings", icon: Settings },
-] as const;
+  {
+    label: "Rutina de hoy",
+    description: "Entrena o adapta",
+    href: "/today",
+    icon: Dumbbell,
+    tone: "primary",
+  },
+  {
+    label: "Registrar comida",
+    description: "Macros y porciones",
+    href: "/meals/new",
+    icon: Utensils,
+    tone: "energy",
+  },
+  {
+    label: "Foto comida",
+    description: "Estimar con IA",
+    href: "/meals/photo",
+    icon: Camera,
+    tone: "accent",
+  },
+  {
+    label: "Peso y medidas",
+    description: "Actualizar progreso",
+    href: "/body-metrics",
+    icon: Ruler,
+    tone: "success",
+  },
+  {
+    label: "Reloj",
+    description: "Conectar salud",
+    href: "/wearables",
+    icon: Watch,
+    tone: "primary",
+  },
+  {
+    label: "Ajustes",
+    description: "Tema y cuenta",
+    href: "/settings",
+    icon: Settings,
+    tone: "neutral",
+  },
+] satisfies DashboardAction[];
 
 export default function DashboardScreen() {
   const { colors } = useTheme();
@@ -32,6 +89,7 @@ export default function DashboardScreen() {
   const profile = useAppStore((state) => state.activeProfile());
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const nextAction = useMemo(() => buildNextAction(dashboard), [dashboard]);
 
   useFocusEffect(
     useCallback(() => {
@@ -54,35 +112,67 @@ export default function DashboardScreen() {
 
   return (
     <Screen>
-      <ImageBackground source={{ uri: gymImages.weights }} imageStyle={styles.heroImage} style={styles.hero}>
+      <ImageBackground
+        source={{ uri: gymImages.weights }}
+        imageStyle={styles.heroImage}
+        style={styles.hero}
+      >
         <LinearGradient
           colors={["rgba(4, 8, 16, 0.1)", "rgba(4, 8, 16, 0.55)", "rgba(4, 8, 16, 0.92)"]}
           style={styles.heroOverlay}
         />
         <View style={styles.heroContent}>
           <View style={styles.heroPillRow}>
-            <Text style={styles.heroPill}>Family training</Text>
-            <Text style={styles.heroPillAccent}>AI ready</Text>
+            <Text style={styles.heroPill}>Entreno familiar</Text>
+            <Text style={styles.heroPillAccent}>Coach IA</Text>
           </View>
-          <Text style={styles.heroTitle}>{profile ? `Hola, ${profile.displayName}` : "FitFamily AI"}</Text>
-          <Text style={styles.heroSubtitle}>Fuerza, nutrición y progreso en una vista clara.</Text>
+          <Text style={styles.heroTitle} numberOfLines={2}>
+            {profile ? `Hola, ${profile.displayName}` : "FitFamily AI"}
+          </Text>
+          <Text style={styles.heroSubtitle}>Una vista simple para decidir tu próximo paso.</Text>
           {dashboard ? (
             <View style={styles.heroStats}>
               <HeroStat label="Entrenos" value={String(dashboard.workoutsLast7Days)} />
               <HeroStat label="Comidas" value={String(dashboard.mealsLast7Days)} />
-              <HeroStat label="Prote" value={dashboard.averageProteinG ? `${dashboard.averageProteinG}g` : "s/d"} />
+              <HeroStat
+                label="Prote"
+                value={dashboard.averageProteinG ? `${dashboard.averageProteinG}g` : "s/d"}
+              />
             </View>
           ) : null}
         </View>
       </ImageBackground>
 
       {loading ? <LoadingState /> : null}
+      {!loading && dashboard && nextAction ? (
+        <DailyPlanCard dashboard={dashboard} action={nextAction} />
+      ) : null}
       {dashboard ? (
         <View style={styles.statsGrid}>
-          <Stat icon={Dumbbell} tint={colors.primary} label="Entrenos 7d" value={String(dashboard.workoutsLast7Days)} />
-          <Stat icon={Utensils} tint={colors.energy} label="Comidas 7d" value={String(dashboard.mealsLast7Days)} />
-          <Stat icon={Flame} tint={colors.accent} label="Kcal/día" value={dashboard.averageCalories?.toString() ?? "s/d"} />
-          <Stat icon={Beef} tint={colors.success} label="Proteína/día" value={dashboard.averageProteinG ? `${dashboard.averageProteinG}g` : "s/d"} />
+          <Stat
+            icon={Dumbbell}
+            tint={colors.primary}
+            label="Entrenos 7d"
+            value={String(dashboard.workoutsLast7Days)}
+          />
+          <Stat
+            icon={Utensils}
+            tint={colors.energy}
+            label="Comidas 7d"
+            value={String(dashboard.mealsLast7Days)}
+          />
+          <Stat
+            icon={Flame}
+            tint={colors.accent}
+            label="Kcal/día"
+            value={dashboard.averageCalories?.toString() ?? "s/d"}
+          />
+          <Stat
+            icon={Beef}
+            tint={colors.success}
+            label="Proteína/día"
+            value={dashboard.averageProteinG ? `${dashboard.averageProteinG}g` : "s/d"}
+          />
         </View>
       ) : null}
       {dashboard?.latestWeightKg ? (
@@ -104,29 +194,74 @@ export default function DashboardScreen() {
           ))}
         </Card>
       ) : null}
-      {!loading && !dashboard ? <EmptyState title="Sin datos" body="Registra entrenamientos o comidas para alimentar el dashboard." /> : null}
+      {!loading && !dashboard ? (
+        <EmptyState
+          title="Sin datos"
+          body="Registra entrenamientos o comidas para alimentar el dashboard."
+        />
+      ) : null}
       <View>
         <Title style={styles.sectionTitle}>Accesos rápidos</Title>
         <Subtitle>Registra lo importante con pocos toques.</Subtitle>
       </View>
       <View style={styles.actionGrid}>
         {actions.map((action) => {
-          const Icon = action.icon;
-          return (
-            <Pressable
-              key={action.href}
-              style={({ pressed }) => [styles.action, pressed ? styles.actionPressed : null]}
-              onPress={() => router.push(action.href)}
-            >
-              <View style={styles.actionIcon}>
-                <Icon size={20} color={colors.primary} />
-              </View>
-              <Text style={styles.actionText}>{action.label}</Text>
-            </Pressable>
-          );
+          return <QuickAction key={action.href.toString()} action={action} />;
         })}
       </View>
     </Screen>
+  );
+}
+
+function DailyPlanCard({
+  dashboard,
+  action,
+}: {
+  dashboard: DashboardResponse;
+  action: DashboardAction;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const Icon = action.icon;
+  const tint = toneColor(action.tone, colors);
+  return (
+    <Card style={styles.planCard}>
+      <View style={styles.planHeader}>
+        <View style={[styles.planIcon, { backgroundColor: `${tint}1f` }]}>
+          <Icon size={20} color={tint} />
+        </View>
+        <View style={styles.planText}>
+          <Text style={styles.planEyebrow}>Plan de hoy</Text>
+          <Text style={styles.planTitle}>{action.label}</Text>
+          <Text style={styles.planDescription}>{action.description}</Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Abrir ${action.label}`}
+          style={styles.planCta}
+          onPress={() => router.push(action.href)}
+        >
+          <ChevronRight size={20} color={colors.onPrimary} />
+        </Pressable>
+      </View>
+      <View style={styles.signalRow}>
+        <Signal
+          label="Entrenos 7d"
+          value={String(dashboard.workoutsLast7Days)}
+          active={dashboard.workoutsLast7Days > 0}
+        />
+        <Signal
+          label="Comidas 7d"
+          value={String(dashboard.mealsLast7Days)}
+          active={dashboard.mealsLast7Days > 0}
+        />
+        <Signal
+          label="Peso"
+          value={dashboard.latestWeightKg ? `${dashboard.latestWeightKg} kg` : "pend."}
+          active={Boolean(dashboard.latestWeightKg)}
+        />
+      </View>
+    </Card>
   );
 }
 
@@ -154,6 +289,44 @@ function Stat({
   );
 }
 
+function QuickAction({ action }: { action: DashboardAction }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const Icon = action.icon;
+  const tint = toneColor(action.tone, colors);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${action.label}: ${action.description}`}
+      style={({ pressed }) => [styles.action, pressed ? styles.actionPressed : null]}
+      onPress={() => router.push(action.href)}
+    >
+      <View style={[styles.actionIcon, { backgroundColor: `${tint}1f` }]}>
+        <Icon size={20} color={tint} />
+      </View>
+      <View style={styles.actionCopy}>
+        <Text style={styles.actionText} numberOfLines={2}>
+          {action.label}
+        </Text>
+        <Text style={styles.actionDescription} numberOfLines={2}>
+          {action.description}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function Signal({ label, value, active }: { label: string; value: string; active: boolean }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <View style={[styles.signal, active ? styles.signalActive : null]}>
+      <Text style={[styles.signalValue, active ? styles.signalValueActive : null]}>{value}</Text>
+      <Text style={styles.signalLabel}>{label}</Text>
+    </View>
+  );
+}
+
 function HeroStat({ label, value }: { label: string; value: string }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -163,6 +336,52 @@ function HeroStat({ label, value }: { label: string; value: string }) {
       <Text style={styles.heroStatLabel}>{label}</Text>
     </View>
   );
+}
+
+function buildNextAction(dashboard: DashboardResponse | null): DashboardAction | null {
+  if (!dashboard) return null;
+  if (dashboard.workoutsLast7Days === 0) {
+    return {
+      label: "Empieza tu rutina activa",
+      description: "Abre el entrenamiento de hoy y registra la primera sesión de la semana.",
+      href: "/today",
+      icon: Dumbbell,
+      tone: "primary",
+    };
+  }
+  if (dashboard.mealsLast7Days === 0) {
+    return {
+      label: "Registra tu primera comida",
+      description: "Agrega una comida rápida para que los macros empiecen a tener sentido.",
+      href: "/meals/new",
+      icon: Utensils,
+      tone: "energy",
+    };
+  }
+  if (!dashboard.latestWeightKg) {
+    return {
+      label: "Agrega tu punto de partida",
+      description: "Registra peso y medidas para ver progreso real en las próximas semanas.",
+      href: "/body-metrics",
+      icon: Scale,
+      tone: "success",
+    };
+  }
+  return {
+    label: "Pide una recomendación",
+    description: "Pregunta al Coach IA qué ajustar hoy según tus registros recientes.",
+    href: "/chat",
+    icon: Bot,
+    tone: "accent",
+  };
+}
+
+function toneColor(tone: ActionTone, colors: ColorPalette) {
+  if (tone === "energy") return colors.energy;
+  if (tone === "accent") return colors.accent;
+  if (tone === "success") return colors.success;
+  if (tone === "neutral") return colors.muted;
+  return colors.primary;
 }
 
 // El hero va sobre una foto oscura: sus textos usan colores fijos claros
@@ -252,6 +471,84 @@ function makeStyles(colors: ColorPalette) {
       fontSize: 11,
       fontWeight: "800",
     },
+    planCard: {
+      gap: 14,
+      borderColor: colors.primarySoft,
+      backgroundColor: colors.backgroundElevated,
+    },
+    planHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    planIcon: {
+      width: 48,
+      height: 48,
+      borderRadius: 15,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    planText: {
+      flex: 1,
+      gap: 2,
+    },
+    planEyebrow: {
+      color: colors.primary,
+      fontSize: 11,
+      fontWeight: "900",
+      textTransform: "uppercase",
+    },
+    planTitle: {
+      color: colors.text,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    planDescription: {
+      color: colors.muted,
+      fontSize: 12.5,
+      lineHeight: 18,
+      fontWeight: "700",
+    },
+    planCta: {
+      width: 42,
+      height: 42,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.primary,
+    },
+    signalRow: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    signal: {
+      flex: 1,
+      minHeight: 58,
+      justifyContent: "center",
+      borderRadius: 13,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceMuted,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    signalActive: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primarySoft,
+    },
+    signalValue: {
+      color: colors.text,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    signalValueActive: {
+      color: colors.primary,
+    },
+    signalLabel: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "800",
+    },
     statsGrid: {
       flexDirection: "row",
       flexWrap: "wrap",
@@ -273,7 +570,7 @@ function makeStyles(colors: ColorPalette) {
       color: colors.text,
       fontSize: 25,
       fontWeight: "900",
-      letterSpacing: -0.8,
+      letterSpacing: 0,
     },
     statLabel: {
       color: colors.muted,
@@ -300,7 +597,7 @@ function makeStyles(colors: ColorPalette) {
     weightValue: {
       fontSize: 21,
       fontWeight: "900",
-      letterSpacing: -0.5,
+      letterSpacing: 0,
     },
     cardTitle: {
       color: colors.text,
@@ -320,17 +617,17 @@ function makeStyles(colors: ColorPalette) {
       gap: 12,
     },
     action: {
-      flexBasis: "30%",
+      flexBasis: "47%",
       flexGrow: 1,
-      minHeight: 84,
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
+      minHeight: 98,
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: 10,
       borderRadius: 14,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.surface,
-      padding: 10,
+      padding: 12,
       shadowColor: colors.shadow,
       shadowOpacity: 0.05,
       shadowRadius: 10,
@@ -347,13 +644,21 @@ function makeStyles(colors: ColorPalette) {
       borderRadius: 12,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: colors.primarySoft,
+    },
+    actionCopy: {
+      gap: 2,
     },
     actionText: {
       color: colors.text,
-      fontWeight: "800",
-      textAlign: "center",
-      fontSize: 12,
+      fontWeight: "900",
+      fontSize: 13,
+      lineHeight: 17,
+    },
+    actionDescription: {
+      color: colors.muted,
+      fontWeight: "700",
+      fontSize: 11.5,
+      lineHeight: 15,
     },
   });
 }
