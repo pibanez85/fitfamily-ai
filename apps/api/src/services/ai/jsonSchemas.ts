@@ -103,7 +103,8 @@ export const generatedWorkoutJsonSchema = {
     summary: { type: "string" },
     days: {
       type: "array",
-      minItems: 1,
+      minItems: 0,
+      maxItems: 6,
       items: {
         type: "object",
         additionalProperties: false,
@@ -113,6 +114,7 @@ export const generatedWorkoutJsonSchema = {
           exercises: {
             type: "array",
             minItems: 1,
+            maxItems: 12,
             items: {
               type: "object",
               additionalProperties: false,

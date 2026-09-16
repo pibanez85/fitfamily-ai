@@ -14,6 +14,9 @@ import { useAppStore } from "@/store/appStore";
 import { useTheme } from "@/theme/theme";
 import type { ColorPalette } from "@/theme/colors";
 import { radius } from "@/theme/colors";
+import { useLocalDay } from "@/hooks/useLocalDay";
+import { suggestedWorkoutDay } from "@/utils/workoutSchedule";
+import { localDateKey } from "@/utils/localDate";
 
 type WorkoutDetail = {
   id: string;
@@ -45,11 +48,16 @@ const trainingPrompts = [
 ];
 
 export default function TodayScreen() {
+  const profileId = useActiveProfileId();
+  return <ProfileToday key={profileId ?? "no-profile"} />;
+}
+
+function ProfileToday() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const profileId = useActiveProfileId();
   const activeWorkoutId = useAppStore((state) =>
-    profileId ? state.activeWorkoutByProfile[profileId] ?? null : null,
+    profileId ? (state.activeWorkoutByProfile[profileId] ?? null) : null,
   );
   const profile = useAppStore((state) => state.activeProfile());
   const [workout, setWorkout] = useState<WorkoutDetail | null>(null);
@@ -57,9 +65,15 @@ export default function TodayScreen() {
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [aiResponse, setAiResponse] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [completedToday, setCompletedToday] = useState(false);
+  const today = useLocalDay();
 
   useFocusEffect(
     useCallback(() => {
+      setCompletedToday(false);
+      setAiResponse(null);
+      setError(null);
       if (!profileId) return;
       if (!activeWorkoutId) {
         setWorkout(null);
@@ -68,16 +82,36 @@ export default function TodayScreen() {
       }
       let alive = true;
       setLoading(true);
-      api.workouts
-        .detail(activeWorkoutId)
-        .then((data) => {
+      setWorkout(null);
+      setAiResponse(null);
+      setError(null);
+      Promise.all([api.workouts.detail(activeWorkoutId), api.workouts.logs(profileId)])
+        .then(([data, logs]) => {
           if (alive) {
-            setWorkout(data as unknown as WorkoutDetail);
-            setSelectedDayIndex(0);
+            if (data.profileId !== profileId)
+              throw new Error("Esta rutina pertenece a otro perfil.");
+            const detail = data as unknown as WorkoutDetail;
+            setWorkout(detail);
+            setSelectedDayIndex(
+              suggestedWorkoutDay(
+                [...(detail.workoutDays ?? [])].sort((a, b) => a.dayIndex - b.dayIndex),
+                logs,
+                activeWorkoutId,
+                today,
+              ),
+            );
+            setCompletedToday(
+              logs.some(
+                (log) => log.workoutId === activeWorkoutId && localDateKey(log.startedAt) === today,
+              ),
+            );
           }
         })
-        .catch(() => {
-          if (alive) setWorkout(null);
+        .catch((caught) => {
+          if (alive) {
+            setWorkout(null);
+            setError(caught instanceof Error ? caught.message : "No pudimos cargar tu rutina.");
+          }
         })
         .finally(() => {
           if (alive) setLoading(false);
@@ -85,14 +119,11 @@ export default function TodayScreen() {
       return () => {
         alive = false;
       };
-    }, [profileId, activeWorkoutId]),
+    }, [profileId, activeWorkoutId, today]),
   );
 
   const days = workout?.workoutDays ?? [];
-  const sortedDays = useMemo(
-    () => days.slice().sort((a, b) => a.dayIndex - b.dayIndex),
-    [days],
-  );
+  const sortedDays = useMemo(() => days.slice().sort((a, b) => a.dayIndex - b.dayIndex), [days]);
   const selectedDay = sortedDays[selectedDayIndex];
 
   async function askAi(prompt: string) {
@@ -100,13 +131,14 @@ export default function TodayScreen() {
     setAiLoading(true);
     setAiResponse(null);
     try {
-      const context = workout && selectedDay
-        ? ` Rutina activa: ${workout.name}. Día: ${selectedDay.name} con ejercicios ${
-            (selectedDay.workoutDayExercises ?? [])
-              .map((entry) => entry.exercises?.name ?? "ejercicio")
-              .join(", ") || "(sin ejercicios)"
-          }.`
-        : "";
+      const context =
+        workout && selectedDay
+          ? ` Rutina activa: ${workout.name}. Día: ${selectedDay.name} con ejercicios ${
+              (selectedDay.workoutDayExercises ?? [])
+                .map((entry) => entry.exercises?.name ?? "ejercicio")
+                .join(", ") || "(sin ejercicios)"
+            }.`
+          : "";
       const result = await api.ai.chat(profileId, `${prompt}.${context}`);
       setAiResponse(result.message.content);
     } catch (caught) {
@@ -118,15 +150,21 @@ export default function TodayScreen() {
 
   return (
     <Screen>
-      <Title>Entrenamiento</Title>
+      <Title>Tu próximo paso.</Title>
       <Subtitle>
-        {profile ? `${profile.displayName}, esta` : "Esta"} es tu rutina activa. Puedes adaptar el día con IA
-        antes de empezar.
+        {profile ? `${profile.displayName}, elige` : "Elige"} tu sesión y registra cada serie a tu
+        ritmo.
       </Subtitle>
 
       {loading ? <LoadingState /> : null}
+      {error ? <BodyText style={{ color: colors.danger }}>{error}</BodyText> : null}
+      {completedToday ? (
+        <Card style={{ backgroundColor: colors.primarySoft }}>
+          <BodyText>Ya registraste un entrenamiento hoy. Tu sesión está en el historial.</BodyText>
+        </Card>
+      ) : null}
 
-      {!loading && !workout ? (
+      {!loading && !workout && !error ? (
         <Card>
           <EmptyState
             title="Aún no tienes rutina activa"
@@ -152,6 +190,19 @@ export default function TodayScreen() {
           <BodyText style={styles.workoutMeta}>
             {workout.goal ?? workout.description ?? "Rutina sin descripción."}
           </BodyText>
+          {selectedDayIndex === -1 ? (
+            <View
+              style={{ padding: 18, backgroundColor: colors.primarySoft, borderRadius: 12, gap: 8 }}
+            >
+              <Text style={{ color: colors.primary, fontSize: 20, fontWeight: "700" }}>
+                Hoy toca recuperar.
+              </Text>
+              <BodyText>
+                Tu rutina no programa pesas para hoy. Puedes revisar otra sesión usando los días de
+                abajo.
+              </BodyText>
+            </View>
+          ) : null}
 
           <View style={styles.daySelector}>
             {sortedDays.map((day, index) => {
@@ -159,16 +210,35 @@ export default function TodayScreen() {
               return (
                 <Pressable
                   key={day.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={day.name}
+                  accessibilityState={{ selected: active }}
                   onPress={() => setSelectedDayIndex(index)}
                   style={[styles.dayChip, active ? styles.dayChipActive : null]}
                 >
                   <Text style={[styles.dayChipText, active ? styles.dayChipTextActive : null]}>
-                    D{index + 1}
+                    {day.name.includes("·") ? day.name.split(" · ")[0] : `Día ${index + 1}`}
                   </Text>
                 </Pressable>
               );
             })}
           </View>
+
+          <AppButton
+            label="Empezar sesión"
+            icon={Play}
+            disabled={!selectedDay || loading}
+            onPress={() =>
+              router.push({
+                pathname: "/workouts/log",
+                params: {
+                  workoutId: workout.id,
+                  workoutDayId: selectedDay?.id ?? "",
+                  dayIndex: String(selectedDayIndex),
+                },
+              })
+            }
+          />
 
           {selectedDay ? (
             <View style={styles.dayBlock}>
@@ -184,26 +254,17 @@ export default function TodayScreen() {
                       {entry.restSeconds ? ` · descanso ${entry.restSeconds}s` : ""}
                       {entry.targetWeight ? ` · ${entry.targetWeight} kg` : ""}
                     </BodyText>
+                    {entry.notes ? (
+                      <Text style={{ color: colors.muted, fontSize: 12, lineHeight: 18 }}>
+                        {entry.notes.match(/RIR [^.]+/)?.[0] ?? entry.notes}
+                      </Text>
+                    ) : null}
                   </View>
                 ))
               )}
             </View>
           ) : null}
 
-          <AppButton
-            label="Registrar este entrenamiento"
-            icon={Play}
-            onPress={() =>
-              router.push({
-                pathname: "/workouts/log",
-                params: {
-                  workoutId: workout.id,
-                  workoutDayId: selectedDay?.id ?? "",
-                  dayIndex: String(selectedDayIndex),
-                },
-              })
-            }
-          />
           <AppButton
             label="Mis rutinas e historial"
             icon={ListChecks}
@@ -215,32 +276,15 @@ export default function TodayScreen() {
 
       {workout ? (
         <AIHelperCard
-          title="Adapta el día con tu coach IA"
-          subtitle="Pide alternativas, ajusta tiempo, evita molestias. Tu confirmas antes de aplicar."
+          title="Consulta a tu coach"
+          subtitle="Resuelve dudas sobre esta sesión. Las respuestas son sugerencias; puedes editar tu rutina desde Mis rutinas."
           chips={trainingPrompts}
           onAsk={askAi}
           response={aiResponse}
           loading={aiLoading}
           actions={
             aiResponse && !aiLoading
-              ? [
-                  {
-                    label: "Aplicar solo hoy",
-                    variant: "primary",
-                    onPress: () =>
-                      setAiResponse(
-                        "Cambio aplicado SOLO al día de hoy (en memoria). La rutina base no se modifica.",
-                      ),
-                  },
-                  {
-                    label: "Guardar como alternativa",
-                    onPress: () =>
-                      setAiResponse(
-                        "Guardado como alternativa (pendiente: vincular al ejercicio). Por ahora queda registrado en el contexto del chat.",
-                      ),
-                  },
-                  { label: "Descartar", variant: "ghost", onPress: () => setAiResponse(null) },
-                ]
+              ? [{ label: "Descartar", variant: "ghost", onPress: () => setAiResponse(null) }]
               : []
           }
         />

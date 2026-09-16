@@ -34,15 +34,20 @@ import { EmptyState, LoadingState } from "@/components/StateViews";
 import { useActiveProfileId } from "@/lib/activeProfile";
 import { api } from "@/services/api";
 import { useAppStore } from "@/store/appStore";
+import type { WorkoutLogDetail } from "@/utils/workoutAnalytics";
 import {
-  buildExerciseProgress,
-  logVolume,
-  type WorkoutLogDetail,
-} from "@/utils/workoutAnalytics";
+  buildProgressData,
+  type VolumeBar,
+  type NutritionDay,
+  type WeightPoint,
+  type PersonalRecord,
+  type ProgressData,
+} from "@/utils/progressData";
 import { computeNutritionGoals, type NutritionGoals } from "@/utils/nutritionGoals";
 import type { ColorPalette } from "@/theme/colors";
 import { radius } from "@/theme/colors";
 import { useTheme } from "@/theme/theme";
+import { useLocalDay } from "@/hooks/useLocalDay";
 
 // ─── Tipos y periodo ─────────────────────────────────────────────────────────
 
@@ -55,38 +60,20 @@ const PERIOD_LABEL: Record<Period, string> = {
   "90d": "últimos 90 días",
 };
 
-const WEEKDAY_LETTERS = ["D", "L", "M", "X", "J", "V", "S"];
-
-type VolumeBar = { label: string; value: number };
-type NutritionDay = { day: string; calories: number; protein: number; workout: boolean };
-type WeightPoint = { label: string; weight: number; fat: number | null };
-type PersonalRecord = { exercise: string; kg: number; date: string; deltaKg: number };
-
-type ProgressData = {
-  sessions: number;
-  sessionsPrev: number;
-  avgCalories: number | null;
-  avgProtein: number | null;
-  latestWeight: number | null;
-  latestFat: number | null;
-  weightDelta: number | null;
-  volumeBars: VolumeBar[];
-  volumeTrendPct: number | null;
-  nutritionWeek: NutritionDay[];
-  cross: { workoutCal: number; restCal: number; workoutProt: number; restProt: number } | null;
-  weightPoints: WeightPoint[];
-  personalRecords: PersonalRecord[];
-  hasAnyData: boolean;
-};
-
 // ─── Pantalla ────────────────────────────────────────────────────────────────
 
 export default function ProgressScreen() {
+  const profileId = useActiveProfileId();
+  return <ProfileProgress key={profileId ?? "no-profile"} />;
+}
+
+function ProfileProgress() {
+  const today = useLocalDay();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const profileId = useActiveProfileId();
-  const profile = useAppStore((state) =>
-    state.profiles.find((entry) => entry.id === state.activeProfileId) ?? null,
+  const profile = useAppStore(
+    (state) => state.profiles.find((entry) => entry.id === state.activeProfileId) ?? null,
   );
   const [period, setPeriod] = useState<Period>("30d");
   const [logs, setLogs] = useState<WorkoutLogDetail[]>([]);
@@ -113,7 +100,8 @@ export default function ProgressScreen() {
           setMetrics(metricsData);
         })
         .catch((caught) => {
-          if (alive) setError(caught instanceof Error ? caught.message : "No pude cargar tu progreso.");
+          if (alive)
+            setError(caught instanceof Error ? caught.message : "No pude cargar tu progreso.");
         })
         .finally(() => {
           if (alive) setLoading(false);
@@ -121,11 +109,17 @@ export default function ProgressScreen() {
       return () => {
         alive = false;
       };
-    }, [profileId]),
+    }, [profileId, today]),
   );
 
-  const data = useMemo(() => buildProgressData(logs, meals, metrics, period), [logs, meals, metrics, period]);
-  const goals = useMemo(() => computeNutritionGoals(profile, data.latestWeight), [profile, data.latestWeight]);
+  const data = useMemo(
+    () => buildProgressData(logs, meals, metrics, period, today),
+    [logs, meals, metrics, period, today],
+  );
+  const goals = useMemo(
+    () => computeNutritionGoals(profile, data.latestWeight),
+    [profile, data.latestWeight],
+  );
   const summary = useMemo(() => buildSummaryText(data, goals, period), [data, goals, period]);
 
   const sessionsSub =
@@ -141,7 +135,7 @@ export default function ProgressScreen() {
       <View style={styles.headerRow}>
         <View>
           <Text style={styles.screenTitle}>Avances</Text>
-          <Text style={styles.screenSub}>Tu entreno y nutrición, con datos reales</Text>
+          <Text style={styles.screenSub}>Tu entreno y nutrición, según tus registros</Text>
         </View>
         <View style={styles.periodRow}>
           {(["7d", "30d", "90d"] as Period[]).map((option) => (
@@ -150,7 +144,9 @@ export default function ProgressScreen() {
               onPress={() => setPeriod(option)}
               style={[styles.periodBtn, period === option && styles.periodBtnActive]}
             >
-              <Text style={[styles.periodLabel, period === option && styles.periodLabelActive]}>{option}</Text>
+              <Text style={[styles.periodLabel, period === option && styles.periodLabelActive]}>
+                {option}
+              </Text>
             </Pressable>
           ))}
         </View>
@@ -249,7 +245,8 @@ export default function ProgressScreen() {
             <Card>
               <Text style={styles.cardTitle}>Volumen por sesión</Text>
               <Text style={styles.hintText}>
-                Cuando registres entrenamientos con peso y repeticiones, acá verás cuánto levantas por sesión.
+                Cuando registres entrenamientos con peso y repeticiones, acá verás cuánto levantas
+                por sesión.
               </Text>
             </Card>
           )}
@@ -258,7 +255,9 @@ export default function ProgressScreen() {
           {data.nutritionWeek.some((day) => day.calories > 0) ? (
             <Card>
               <Text style={styles.cardTitle}>Nutrición esta semana</Text>
-              <Text style={styles.cardSub}>Días de entreno destacados. Cada línea usa su propia escala.</Text>
+              <Text style={styles.cardSub}>
+                Días de entreno destacados. Cada línea usa su propia escala.
+              </Text>
               <NutritionChart data={data.nutritionWeek} colors={colors} />
               <View style={styles.legendRow}>
                 <View style={styles.legendItem}>
@@ -331,7 +330,9 @@ export default function ProgressScreen() {
                 <Trophy size={16} color={colors.energy} />
                 <Text style={styles.cardTitle}>Récords personales</Text>
               </View>
-              <Text style={styles.cardSub}>Tu mejor peso levantado por ejercicio en el periodo</Text>
+              <Text style={styles.cardSub}>
+                Tu mejor peso levantado por ejercicio en el periodo
+              </Text>
               {data.personalRecords.map((record) => (
                 <PRRow key={record.exercise} record={record} colors={colors} />
               ))}
@@ -352,159 +353,6 @@ export default function ProgressScreen() {
 
 // ─── Cálculo de datos reales ─────────────────────────────────────────────────
 
-function dayKey(value: string): string {
-  return new Date(value).toDateString();
-}
-
-function shortDate(value: string): string {
-  return new Date(value).toLocaleDateString("es-CL", { day: "2-digit", month: "short" });
-}
-
-function buildProgressData(
-  logs: WorkoutLogDetail[],
-  meals: Meal[],
-  metrics: BodyMetric[],
-  period: Period,
-): ProgressData {
-  const periodDays = PERIOD_DAYS[period];
-  const cutoff = Date.now() - periodDays * 24 * 60 * 60 * 1000;
-  const prevCutoff = Date.now() - periodDays * 2 * 24 * 60 * 60 * 1000;
-
-  const periodLogs = logs
-    .filter((log) => new Date(log.startedAt).getTime() >= cutoff)
-    .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
-  const prevLogs = logs.filter((log) => {
-    const time = new Date(log.startedAt).getTime();
-    return time >= prevCutoff && time < cutoff;
-  });
-
-  // Volumen de las últimas sesiones del periodo.
-  const volumeBars: VolumeBar[] = periodLogs.slice(-7).map((log) => ({
-    label: WEEKDAY_LETTERS[new Date(log.startedAt).getDay()]!,
-    value: logVolume(log),
-  }));
-
-  // Tendencia de volumen: primera mitad vs segunda mitad del periodo.
-  let volumeTrendPct: number | null = null;
-  const volumes = periodLogs.map((log) => logVolume(log)).filter((value) => value > 0);
-  if (volumes.length >= 4) {
-    const half = Math.floor(volumes.length / 2);
-    const firstAvg = volumes.slice(0, half).reduce((a, b) => a + b, 0) / half;
-    const secondAvg = volumes.slice(half).reduce((a, b) => a + b, 0) / (volumes.length - half);
-    if (firstAvg > 0) volumeTrendPct = Math.round(((secondAvg - firstAvg) / firstAvg) * 100);
-  }
-
-  // Comidas del periodo agrupadas por día.
-  const mealsByDay = new Map<string, { calories: number; protein: number }>();
-  for (const meal of meals) {
-    if (new Date(meal.eatenAt).getTime() < cutoff) continue;
-    const key = dayKey(meal.eatenAt);
-    const entry = mealsByDay.get(key) ?? { calories: 0, protein: 0 };
-    entry.calories += meal.calories ?? 0;
-    entry.protein += meal.proteinG ?? 0;
-    mealsByDay.set(key, entry);
-  }
-  const dailyTotals = [...mealsByDay.values()];
-  const avgCalories = dailyTotals.length
-    ? Math.round(dailyTotals.reduce((sum, entry) => sum + entry.calories, 0) / dailyTotals.length)
-    : null;
-  const avgProtein = dailyTotals.length
-    ? Math.round(dailyTotals.reduce((sum, entry) => sum + entry.protein, 0) / dailyTotals.length)
-    : null;
-
-  // Semana calendario (para el gráfico de nutrición).
-  const workoutDayKeys = new Set(logs.map((log) => dayKey(log.startedAt)));
-  const allMealsByDay = new Map<string, { calories: number; protein: number }>();
-  for (const meal of meals) {
-    const key = dayKey(meal.eatenAt);
-    const entry = allMealsByDay.get(key) ?? { calories: 0, protein: 0 };
-    entry.calories += meal.calories ?? 0;
-    entry.protein += meal.proteinG ?? 0;
-    allMealsByDay.set(key, entry);
-  }
-  const nutritionWeek: NutritionDay[] = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - index));
-    const key = date.toDateString();
-    const entry = allMealsByDay.get(key);
-    return {
-      day: WEEKDAY_LETTERS[date.getDay()]!,
-      calories: Math.round(entry?.calories ?? 0),
-      protein: Math.round(entry?.protein ?? 0),
-      workout: workoutDayKeys.has(key),
-    };
-  });
-
-  // Correlación entreno vs descanso (solo días con comidas registradas).
-  const workoutDayTotals: Array<{ calories: number; protein: number }> = [];
-  const restDayTotals: Array<{ calories: number; protein: number }> = [];
-  for (const [key, entry] of mealsByDay) {
-    (workoutDayKeys.has(key) ? workoutDayTotals : restDayTotals).push(entry);
-  }
-  const avgOf = (items: Array<{ calories: number; protein: number }>, field: "calories" | "protein") =>
-    Math.round(items.reduce((sum, item) => sum + item[field], 0) / items.length);
-  const cross =
-    workoutDayTotals.length > 0 && restDayTotals.length > 0
-      ? {
-          workoutCal: avgOf(workoutDayTotals, "calories"),
-          restCal: avgOf(restDayTotals, "calories"),
-          workoutProt: avgOf(workoutDayTotals, "protein"),
-          restProt: avgOf(restDayTotals, "protein"),
-        }
-      : null;
-
-  // Peso corporal: registros del periodo (o los últimos 6 si hay pocos).
-  const sortedMetrics = metrics
-    .filter((metric) => metric.weightKg != null)
-    .sort((a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime());
-  let weightMetrics = sortedMetrics.filter((metric) => new Date(metric.measuredAt).getTime() >= cutoff);
-  if (weightMetrics.length < 2) weightMetrics = sortedMetrics.slice(-6);
-  const weightPoints: WeightPoint[] = weightMetrics.map((metric) => ({
-    label: shortDate(metric.measuredAt),
-    weight: metric.weightKg!,
-    fat: metric.bodyFatPercentage ?? null,
-  }));
-  const latestMetric = sortedMetrics[sortedMetrics.length - 1] ?? null;
-  const latestWeight = latestMetric?.weightKg ?? null;
-  const latestFat = latestMetric?.bodyFatPercentage ?? null;
-  const weightDelta =
-    weightPoints.length >= 2
-      ? Math.round((weightPoints[weightPoints.length - 1]!.weight - weightPoints[0]!.weight) * 10) / 10
-      : null;
-
-  // Récords personales desde las series registradas.
-  const personalRecords: PersonalRecord[] = buildExerciseProgress(periodLogs)
-    .filter((summary) => summary.bestWeight > 0)
-    .sort((a, b) => b.bestWeight - a.bestWeight)
-    .slice(0, 4)
-    .map((summary) => {
-      const bestEntry = [...summary.trend].reverse().find((entry) => entry.weight === summary.bestWeight);
-      return {
-        exercise: summary.exerciseName,
-        kg: summary.bestWeight,
-        date: bestEntry?.label ?? "",
-        deltaKg: Math.round(summary.weightDelta * 10) / 10,
-      };
-    });
-
-  return {
-    sessions: periodLogs.length,
-    sessionsPrev: prevLogs.length,
-    avgCalories,
-    avgProtein,
-    latestWeight,
-    latestFat,
-    weightDelta,
-    volumeBars,
-    volumeTrendPct,
-    nutritionWeek,
-    cross,
-    weightPoints,
-    personalRecords,
-    hasAnyData: logs.length > 0 || meals.length > 0 || metrics.length > 0,
-  };
-}
-
 // Resumen en lenguaje simple, calculado desde los datos (sin IA ni promesas).
 function buildSummaryText(data: ProgressData, goals: NutritionGoals, period: Period): string {
   const parts: string[] = [];
@@ -518,28 +366,38 @@ function buildSummaryText(data: ProgressData, goals: NutritionGoals, period: Per
   } else {
     parts.push(
       `Completaste ${data.sessions} ${data.sessions === 1 ? "sesión" : "sesiones"} en los ${PERIOD_LABEL[period]} (~${perWeek} por semana).${
-        data.sessions >= data.sessionsPrev && data.sessionsPrev > 0 ? " Vas igual o mejor que el periodo anterior — la constancia es lo que más importa." : ""
+        data.sessions >= data.sessionsPrev && data.sessionsPrev > 0
+          ? " Vas igual o mejor que el periodo anterior — la constancia es lo que más importa."
+          : ""
       }`,
     );
   }
 
   if (data.volumeTrendPct != null) {
     if (data.volumeTrendPct > 5) {
-      parts.push(`Tu volumen de entrenamiento va subiendo (+${data.volumeTrendPct}% en el periodo). Señal clara de progreso.`);
+      parts.push(
+        `Tu volumen de entrenamiento va subiendo (+${data.volumeTrendPct}% en el periodo). El volumen también depende de qué sesiones registraste.`,
+      );
     } else if (data.volumeTrendPct < -5) {
-      parts.push(`Tu volumen bajó ${Math.abs(data.volumeTrendPct)}% en el periodo. Si fue una semana liviana planificada, perfecto; si no, retoma tus pesos habituales.`);
+      parts.push(
+        `Tu volumen bajó ${Math.abs(data.volumeTrendPct)}% en el periodo. Revisa si cambiaste la rutina o faltan series por registrar antes de compararlo.`,
+      );
     } else {
-      parts.push("Tu volumen se mantiene estable. Cuando las últimas repeticiones salgan fáciles, sube un poco el peso.");
+      parts.push(
+        "Tu volumen se mantiene estable. Cuando las últimas repeticiones salgan fáciles, sube un poco el peso.",
+      );
     }
   }
 
   if (data.avgProtein != null && data.avgCalories != null) {
     const proteinRatio = data.avgProtein / goals.proteinG;
     if (proteinRatio >= 0.9) {
-      parts.push(`Nutrición: promedias ${data.avgCalories} kcal y ${data.avgProtein}g de proteína al día — dentro de tu meta de ${goals.proteinG}g. Bien ahí.`);
+      parts.push(
+        `En los días con comidas registradas, promedias ${data.avgCalories} kcal y ${data.avgProtein}g de proteína al día — dentro de tu meta de ${goals.proteinG}g. Bien ahí.`,
+      );
     } else {
       parts.push(
-        `Nutrición: promedias ${data.avgCalories} kcal y ${data.avgProtein}g de proteína al día, por debajo de tu meta de ${goals.proteinG}g. Suma una fuente magra (pollo, huevo, yogurt proteico) en alguna comida.`,
+        `En los días con comidas registradas, promedias ${data.avgCalories} kcal y ${data.avgProtein}g de proteína al día, por debajo de tu meta de ${goals.proteinG}g. Suma una fuente magra (pollo, huevo, yogurt proteico) en alguna comida.`,
       );
     }
   }
@@ -578,7 +436,9 @@ function KpiCard({
       <Icon size={14} color={color} />
       <Text style={styles.kpiValue}>{value}</Text>
       <Text style={styles.kpiLabel}>{label}</Text>
-      <Text style={[styles.kpiSub, { color: subPositive ? colors.success : colors.muted }]}>{sub}</Text>
+      <Text style={[styles.kpiSub, { color: subPositive ? colors.success : colors.muted }]}>
+        {sub}
+      </Text>
     </View>
   );
 }
@@ -839,7 +699,14 @@ function WeightChart({ data, colors }: { data: WeightPoint[]; colors: ColorPalet
         />
       ))}
       {points.map((point, index) => (
-        <SvgText key={index} x={point.x} y={H - 4} fontSize={7} fill={colors.muted} textAnchor="middle">
+        <SvgText
+          key={index}
+          x={point.x}
+          y={H - 4}
+          fontSize={7}
+          fill={colors.muted}
+          textAnchor="middle"
+        >
           {point.label}
         </SvgText>
       ))}
@@ -865,8 +732,22 @@ function CrossRefTable({
         <Text style={[styles.crossCell, styles.crossColHead]}>Proteína</Text>
         <Text style={[styles.crossCell, styles.crossColHead]} />
       </View>
-      <CrossRow label="Días entreno" cal={cross.workoutCal} prot={cross.workoutProt} maxCal={maxCal} highlight colors={colors} />
-      <CrossRow label="Días descanso" cal={cross.restCal} prot={cross.restProt} maxCal={maxCal} highlight={false} colors={colors} />
+      <CrossRow
+        label="Días entreno"
+        cal={cross.workoutCal}
+        prot={cross.workoutProt}
+        maxCal={maxCal}
+        highlight
+        colors={colors}
+      />
+      <CrossRow
+        label="Días descanso"
+        cal={cross.restCal}
+        prot={cross.restProt}
+        maxCal={maxCal}
+        highlight={false}
+        colors={colors}
+      />
       <CrossRow
         label="Diferencia"
         cal={cross.workoutCal - cross.restCal}

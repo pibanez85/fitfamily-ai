@@ -91,7 +91,11 @@ async function clearInvalidSession() {
 
 export async function checkBackendHealth(): Promise<string> {
   try {
-    const response = await withTimeout(fetch(`${env.apiUrl}/health`), 8000, "Backend sin respuesta.");
+    const response = await withTimeout(
+      fetch(`${env.apiUrl}/health`),
+      8000,
+      "Backend sin respuesta.",
+    );
     if (!response.ok) return `Backend responde con estado ${response.status}.`;
     const payload = (await response.json()) as { service?: string };
     return `Backend OK: ${payload.service ?? env.apiUrl}`;
@@ -111,11 +115,13 @@ const realApi = {
         body: JSON.stringify(input),
       }),
   },
-  dashboard: (profileId: string) =>
-    request<DashboardResponse>(`/profiles/${profileId}/dashboard`),
+  dashboard: (profileId: string) => request<DashboardResponse>(`/profiles/${profileId}/dashboard`),
   workouts: {
+    prepareDefinitionRoutine: () =>
+      request<ExerciseCatalogItem[]>("/exercises/definition-routine", { method: "POST" }),
     exercises: () => request<ExerciseCatalogItem[]>("/exercises"),
-    exerciseDetail: (exerciseId: string) => request<ExerciseCatalogItem>(`/exercises/${exerciseId}`),
+    exerciseDetail: (exerciseId: string) =>
+      request<ExerciseCatalogItem>(`/exercises/${exerciseId}`),
     list: (profileId: string) => request<Workout[]>(`/profiles/${profileId}/workouts`),
     create: (profileId: string, input: CreateWorkoutInput) =>
       request<Workout>(`/profiles/${profileId}/workouts`, {
@@ -140,6 +146,7 @@ const realApi = {
       }),
   },
   meals: {
+    delete: (mealId: string) => request<void>(`/meals/${mealId}`, { method: "DELETE" }),
     list: (profileId: string) => request<Meal[]>(`/profiles/${profileId}/meals`),
     create: (profileId: string, input: CreateMealInput) =>
       request<Meal>(`/profiles/${profileId}/meals`, {
@@ -152,7 +159,8 @@ const realApi = {
       request<FoodSearchResponse>(
         `/foods/search?query=${encodeURIComponent(query)}&includeExternal=${includeExternal ? "true" : "false"}&limit=${limit}`,
       ),
-    barcode: (barcode: string) => request<FoodCatalogItem>(`/foods/barcode/${encodeURIComponent(barcode)}`),
+    barcode: (barcode: string) =>
+      request<FoodCatalogItem>(`/foods/barcode/${encodeURIComponent(barcode)}`),
   },
   bodyMetrics: {
     list: (profileId: string) => request<BodyMetric[]>(`/profiles/${profileId}/body-metrics`),
@@ -164,32 +172,42 @@ const realApi = {
   },
   ai: {
     analyzeFood: (profileId: string, imageUrl: string, notes?: string) =>
-      request<FoodPhotoAnalysis>(`/profiles/${profileId}/ai/analyze-food-photo`, {
-        method: "POST",
-        body: JSON.stringify({ imageUrl, notes }),
-      }, 90000),
+      request<FoodPhotoAnalysis>(
+        `/profiles/${profileId}/ai/analyze-food-photo`,
+        {
+          method: "POST",
+          body: JSON.stringify({ imageUrl, notes }),
+        },
+        90000,
+      ),
     analyzeMachine: (profileId: string, imageUrl: string, notes?: string) =>
-      request<GymMachineAnalysis>(`/profiles/${profileId}/ai/analyze-gym-machine-photo`, {
-        method: "POST",
-        body: JSON.stringify({ imageUrl, notes }),
-      }, 90000),
+      request<GymMachineAnalysis>(
+        `/profiles/${profileId}/ai/analyze-gym-machine-photo`,
+        {
+          method: "POST",
+          body: JSON.stringify({ imageUrl, notes }),
+        },
+        90000,
+      ),
     chat: (profileId: string, message: string, threadId?: string) =>
       request<AIChatResult>(`/profiles/${profileId}/ai/chat`, {
         method: "POST",
         body: JSON.stringify({ message, threadId }),
       }),
     generateWorkout: (profileId: string, body: Omit<GenerateWorkoutRequest, never>) =>
-      request<GeneratedWorkout>(`/profiles/${profileId}/ai/generate-workout`, {
-        method: "POST",
-        body: JSON.stringify(body),
-      }, 60000),
+      request<GeneratedWorkout>(
+        `/profiles/${profileId}/ai/generate-workout`,
+        {
+          method: "POST",
+          body: JSON.stringify(body),
+        },
+        60000,
+      ),
   },
 };
 
 // En modo demo (sin credenciales) usamos datos simulados en memoria.
 // Con credenciales reales, llamamos al backend Express.
-export const api: typeof realApi = isDemoMode
-  ? (demoApi as unknown as typeof realApi)
-  : realApi;
+export const api: typeof realApi = isDemoMode ? (demoApi as unknown as typeof realApi) : realApi;
 
 export type { ApiEnvelope };

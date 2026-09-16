@@ -129,6 +129,10 @@ export function createAIRouter(input: {
           experienceLevel: req.body.experienceLevel,
           durationLabel: req.body.durationLabel ?? undefined,
           instructions: req.body.instructions ?? undefined,
+          allowedEquipment: req.body.allowedEquipment,
+          excludedExerciseIds: req.body.excludedExerciseIds,
+          sessionMinutes: req.body.sessionMinutes,
+          dayNames: req.body.dayNames,
           catalog: req.body.catalog,
         });
         res.json(result.data);
@@ -152,6 +156,17 @@ export function createAIRouter(input: {
           ? await ensureThreadForProfile(input, req.body.threadId, profileId, userId)
           : await createThread(input.data, profileId, req.body.message);
 
+        const previousMessages = await input.data.listBy(
+          "ai_chat_messages",
+          "thread_id",
+          threadId,
+          {
+            select: "role, content, created_at",
+            order: "created_at",
+            limit: 20,
+          },
+        );
+
         await input.data.insert("ai_chat_messages", {
           threadId,
           role: "user",
@@ -165,6 +180,13 @@ export function createAIRouter(input: {
           threadId,
           message: req.body.message,
           context,
+          history: previousMessages.reverse().flatMap((message) => {
+            const entry = message as { role?: string; content?: string };
+            return (entry.role === "user" || entry.role === "assistant") &&
+              typeof entry.content === "string"
+              ? [{ role: entry.role, content: entry.content }]
+              : [];
+          }),
         });
 
         await input.data.insert("ai_chat_messages", {
@@ -208,7 +230,11 @@ async function ensureThreadForProfile(
   return threadId;
 }
 
-async function createThread(data: DataService, profileId: string, message: string): Promise<string> {
+async function createThread(
+  data: DataService,
+  profileId: string,
+  message: string,
+): Promise<string> {
   const thread = await data.insert("ai_chat_threads", {
     profileId,
     title: message.slice(0, 80),

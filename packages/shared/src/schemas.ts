@@ -384,14 +384,23 @@ export const WorkoutBuilderCatalogItemSchema = z.object({
   equipment: z.string().nullable().optional(),
 });
 
-export const GenerateWorkoutRequestSchema = z.object({
-  goal: z.string().trim().min(1).max(80),
-  frequency: z.number().int().min(1).max(6),
-  experienceLevel: z.string().trim().max(60).default("intermedio"),
-  durationLabel: z.string().trim().max(80).nullable().optional(),
-  instructions: z.string().trim().max(2000).nullable().optional(),
-  catalog: z.array(WorkoutBuilderCatalogItemSchema).min(1).max(200),
-});
+export const GenerateWorkoutRequestSchema = z
+  .object({
+    goal: z.string().trim().min(1).max(80),
+    frequency: z.number().int().min(1).max(6),
+    experienceLevel: z.string().trim().max(60).default("intermedio"),
+    durationLabel: z.string().trim().max(80).nullable().optional(),
+    instructions: z.string().trim().max(2000).nullable().optional(),
+    allowedEquipment: z.array(z.string().trim().min(1).max(80)).min(1).max(30).optional(),
+    excludedExerciseIds: z.array(z.string().min(1)).max(200).optional(),
+    sessionMinutes: z.number().int().min(10).max(180).optional(),
+    dayNames: z.array(z.string().trim().min(1).max(80)).min(1).max(6).optional(),
+    catalog: z.array(WorkoutBuilderCatalogItemSchema).min(1).max(200),
+  })
+  .refine((value) => !value.dayNames || value.dayNames.length === value.frequency, {
+    message: "Los nombres de los dias deben coincidir con la frecuencia.",
+    path: ["dayNames"],
+  });
 
 export const GeneratedWorkoutExerciseSchema = z.object({
   exerciseId: z.string(),

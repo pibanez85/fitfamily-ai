@@ -11,7 +11,6 @@ import {
   Pause,
   Play,
   Plus,
-  RefreshCcw,
   RotateCcw,
   Save,
   Sparkles,
@@ -19,8 +18,12 @@ import {
   Zap,
 } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import type { CreateWorkoutLogInput, ExerciseCatalogItem, MuscleGroupId } from "@fitfamily-ai/shared";
+import { Alert, AppState, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import type {
+  CreateWorkoutLogInput,
+  ExerciseCatalogItem,
+  MuscleGroupId,
+} from "@fitfamily-ai/shared";
 import { MUSCLE_GROUPS } from "@fitfamily-ai/shared";
 import { AppButton } from "@/components/AppButton";
 import { Card } from "@/components/Card";
@@ -28,7 +31,18 @@ import { Screen } from "@/components/Screen";
 import { EmptyState, LoadingState } from "@/components/StateViews";
 import { Subtitle, Title } from "@/components/Typography";
 import { useActiveProfileId } from "@/lib/activeProfile";
+import {
+  completedSessionSets,
+  emptyRestClock,
+  parseSessionEffort,
+  remainingRestSeconds,
+  validStoredSet,
+  validateCompletedSet,
+  workoutDraftKey,
+  type RestClock,
+} from "@/lib/workoutSession";
 import { api } from "@/services/api";
+import { deviceStorage } from "@/services/localStorage";
 import { notifyRestFinished } from "@/services/restTimerFeedback";
 import { useAppStore } from "@/store/appStore";
 import type { ColorPalette } from "@/theme/colors";
@@ -85,7 +99,7 @@ type ExerciseLogDraft = {
   scienceScore: number;
   plannedNotes: string;
   exerciseNote: string;
-  completed: boolean;
+
   sets: SetDraft[];
 };
 
@@ -106,10 +120,22 @@ type AiExerciseState = {
 };
 
 const quickAiActions = [
-  { label: "No tengo maquina", prompt: "No tengo esta maquina. Dame una alternativa equivalente para hoy." },
-  { label: "Baja intensidad", prompt: "Estoy cansado. Baja la intensidad de este ejercicio para hoy sin perder el objetivo." },
-  { label: "Poco tiempo", prompt: "Tengo poco tiempo. Resume este ejercicio o dime como hacerlo mas eficiente." },
-  { label: "Molestia", prompt: "Tengo una molestia. Dime que evitar y cuando deberia consultar a un profesional." },
+  {
+    label: "No tengo maquina",
+    prompt: "No tengo esta maquina. Dame una alternativa equivalente para hoy.",
+  },
+  {
+    label: "Baja intensidad",
+    prompt: "Estoy cansado. Baja la intensidad de este ejercicio para hoy sin perder el objetivo.",
+  },
+  {
+    label: "Poco tiempo",
+    prompt: "Tengo poco tiempo. Resume este ejercicio o dime como hacerlo mas eficiente.",
+  },
+  {
+    label: "Molestia",
+    prompt: "Tengo una molestia. Dime que evitar y cuando deberia consultar a un profesional.",
+  },
   { label: "Con mancuernas", prompt: "Reemplaza este ejercicio por una opcion con mancuernas." },
 ];
 
@@ -134,20 +160,30 @@ export default function WorkoutLogScreen() {
 
   const [workout, setWorkout] = useState<WorkoutDetail | null>(null);
   const [catalog, setCatalog] = useState<ExerciseCatalogItem[]>([]);
-  const [selectedDayIndex, setSelectedDayIndex] = useState(Number.isFinite(routeDayIndex) ? routeDayIndex : 0);
+  const [selectedDayIndex, setSelectedDayIndex] = useState(
+    Number.isFinite(routeDayIndex) ? routeDayIndex : 0,
+  );
   const [exerciseLogs, setExerciseLogs] = useState<ExerciseLogDraft[]>([]);
   const [aiStates, setAiStates] = useState<Record<string, AiExerciseState>>({});
-  const [startedAt] = useState(() => new Date().toISOString());
+  const [startedAt, setStartedAt] = useState(() => new Date().toISOString());
   const [effort, setEffort] = useState("");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [timerSeconds, setTimerSeconds] = useState(0);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [timerLabel, setTimerLabel] = useState<string | null>(null);
+  const [restClock, setRestClock] = useState<RestClock>(emptyRestClock);
+  const [clockNow, setClockNow] = useState(Date.now());
+  const timerSeconds = remainingRestSeconds(restClock, clockNow);
+  const timerRunning = restClock.deadline !== null;
+  const timerLabel = restClock.label;
   const [defaultRestSeconds, setDefaultRestSeconds] = useState("90");
   const [timerFinished, setTimerFinished] = useState(false);
+  const [showTimerSettings, setShowTimerSettings] = useState(false);
+  const [draftReady, setDraftReady] = useState<string | null>(null);
+  const [draftMessage, setDraftMessage] = useState<string | null>(null);
+  const draftWrites = useRef(Promise.resolve());
+  const sessionSaved = useRef(false);
+  const saveInFlight = useRef(false);
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -158,9 +194,15 @@ export default function WorkoutLogScreen() {
 
     let alive = true;
     setLoading(true);
+    setWorkout(null);
+    setError(null);
     Promise.all([api.workouts.detail(workoutId), api.workouts.exercises()])
       .then(([workoutData, exerciseCatalog]) => {
         if (!alive) return;
+        if (workoutData.profileId !== profileId)
+          throw new Error(
+            "Esta rutina pertenece a otro perfil. Abre las rutinas de tu perfil actual.",
+          );
         const detail = workoutData as unknown as WorkoutDetail;
         const sortedDays = sortDays(detail.workoutDays ?? []);
         const initialIndex = findInitialDayIndex(sortedDays, routeWorkoutDayId, routeDayIndex);
@@ -178,39 +220,150 @@ export default function WorkoutLogScreen() {
     return () => {
       alive = false;
     };
-  }, [routeDayIndex, routeWorkoutDayId, workoutId]);
+  }, [routeDayIndex, routeWorkoutDayId, workoutId, profileId]);
 
   const sortedDays = useMemo(() => sortDays(workout?.workoutDays ?? []), [workout]);
   const selectedDay = sortedDays[selectedDayIndex] ?? sortedDays[0];
-  const completedExercises = exerciseLogs.filter((exercise) => exercise.completed).length;
+  const completedExercises = exerciseLogs.filter(
+    (exercise) => exercise.sets.length > 0 && exercise.sets.every((set) => set.done),
+  ).length;
+  const completedSets = exerciseLogs.reduce(
+    (sum, exercise) => sum + exercise.sets.filter((set) => set.done).length,
+    0,
+  );
+  const draftKey =
+    profileId && workoutId && selectedDay
+      ? workoutDraftKey(profileId, workoutId, selectedDay.id)
+      : null;
   const totalSets = exerciseLogs.reduce((sum, exercise) => sum + exercise.sets.length, 0);
-  const aiInstructions = useMemo(() => extractAiInstructions(workout?.description), [workout?.description]);
+  const aiInstructions = useMemo(
+    () => extractAiInstructions(workout?.description),
+    [workout?.description],
+  );
 
   useEffect(() => {
-    if (!selectedDay) {
+    if (!selectedDay || !draftKey) {
       setExerciseLogs([]);
       return;
     }
-    setExerciseLogs(buildExerciseLogs(selectedDay, catalog));
+    let alive = true;
+    setDraftReady(null);
+    setDraftMessage(null);
+    sessionSaved.current = false;
+    const fresh = buildExerciseLogs(selectedDay, catalog);
+    setExerciseLogs(fresh);
+    setStartedAt(new Date().toISOString());
+    setEffort("");
+    setNotes("");
+    setRestClock(emptyRestClock);
     setAiStates({});
     setTimerFinished(false);
-  }, [catalog, selectedDay]);
+    void draftWrites.current
+      .then(() => deviceStorage.getItem(draftKey))
+      .then((stored) => {
+        if (!alive || !stored) return;
+        const draft = JSON.parse(stored);
+        if (
+          draft.version !== 1 ||
+          !Array.isArray(draft.exercises) ||
+          typeof draft.startedAt !== "string" ||
+          !Number.isFinite(Date.parse(draft.startedAt))
+        )
+          return;
+        setExerciseLogs(
+          fresh.map((exercise) => {
+            const saved = draft.exercises.find(
+              (entry: { workoutDayExerciseId?: string }) =>
+                entry.workoutDayExerciseId === exercise.workoutDayExerciseId,
+            );
+            return saved &&
+              Array.isArray(saved.sets) &&
+              saved.sets.length > 0 &&
+              saved.sets.every(validStoredSet)
+              ? {
+                  ...exercise,
+                  sets: saved.sets,
+                  exerciseNote:
+                    typeof saved.exerciseNote === "string"
+                      ? saved.exerciseNote
+                      : exercise.exerciseNote,
+                }
+              : exercise;
+          }),
+        );
+        setStartedAt(draft.startedAt);
+        setEffort(typeof draft.effort === "string" ? draft.effort : "");
+        setNotes(typeof draft.notes === "string" ? draft.notes : "");
+        if (
+          draft.restClock &&
+          (draft.restClock.deadline === null || Number.isFinite(draft.restClock.deadline)) &&
+          Number.isFinite(draft.restClock.pausedSeconds)
+        ) {
+          setRestClock({
+            ...draft.restClock,
+            label: typeof draft.restClock.label === "string" ? draft.restClock.label : null,
+          });
+          setClockNow(Date.now());
+        }
+        setDraftMessage(
+          `Borrador recuperado del ${new Date(draft.startedAt).toLocaleDateString("es-CL")}. Puedes continuarlo o empezar de nuevo.`,
+        );
+      })
+      .catch(() => {
+        if (alive) setDraftMessage("No pudimos recuperar el borrador local.");
+      })
+      .finally(() => {
+        if (alive) setDraftReady(draftKey);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [catalog, selectedDay, draftKey]);
+
+  useEffect(() => {
+    if (!draftKey || draftReady !== draftKey || sessionSaved.current) return;
+    const value = JSON.stringify({
+      version: 1,
+      startedAt,
+      effort,
+      notes,
+      restClock,
+      exercises: exerciseLogs.map(({ workoutDayExerciseId, exerciseNote, sets }) => ({
+        workoutDayExerciseId,
+        exerciseNote,
+        sets,
+      })),
+    });
+    draftWrites.current = draftWrites.current
+      .then(() => deviceStorage.setItem(draftKey, value))
+      .catch(() =>
+        setDraftMessage(
+          "No pudimos guardar el borrador en este dispositivo. Mantén la pantalla abierta hasta guardar el entrenamiento.",
+        ),
+      );
+  }, [draftKey, draftReady, startedAt, effort, notes, restClock, exerciseLogs]);
 
   useEffect(() => {
     if (!timerRunning) return;
-    const id = setInterval(() => {
-      setTimerSeconds((current) => {
-        if (current <= 1) {
-          setTimerRunning(false);
-          setTimerFinished(true);
-          void notifyRestFinished(timerLabel ?? "Descanso terminado");
-          return 0;
-        }
-        return current - 1;
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, [timerLabel, timerRunning]);
+    const tick = () => {
+      const now = Date.now();
+      setClockNow(now);
+      if (remainingRestSeconds(restClock, now) === 0) {
+        setRestClock((current) => ({ ...current, deadline: null, pausedSeconds: 0 }));
+        setTimerFinished(true);
+        void notifyRestFinished(timerLabel ?? "Descanso terminado");
+      }
+    };
+    tick();
+    const id = setInterval(tick, 500);
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") tick();
+    });
+    return () => {
+      clearInterval(id);
+      subscription.remove();
+    };
+  }, [restClock, timerLabel, timerRunning]);
 
   function updateSet(exerciseIndex: number, setIndex: number, patch: Partial<SetDraft>) {
     // Al completar una serie, el descanso arranca solo con el tiempo
@@ -219,6 +372,12 @@ export default function WorkoutLogScreen() {
       const exercise = exerciseLogs[exerciseIndex];
       const set = exercise?.sets[setIndex];
       if (exercise && set) {
+        const invalid = validateCompletedSet({ ...set, ...patch });
+        if (invalid) {
+          setError(`${exercise.exerciseName}, serie ${setIndex + 1}: ${invalid}`);
+          return;
+        }
+        setError(null);
         startRest(
           parseIntOrNull(set.restSeconds) ?? exercise.targetRestSeconds,
           `${exercise.exerciseName} - serie ${setIndex + 1}`,
@@ -230,7 +389,9 @@ export default function WorkoutLogScreen() {
         i === exerciseIndex
           ? {
               ...exercise,
-              sets: exercise.sets.map((set, j) => (j === setIndex ? { ...set, ...patch } : set)),
+              sets: exercise.sets.map((set, j) =>
+                j === setIndex ? { ...set, ...patch, done: patch.done ?? false } : set,
+              ),
             }
           : exercise,
       ),
@@ -239,7 +400,9 @@ export default function WorkoutLogScreen() {
 
   function updateExerciseNote(exerciseIndex: number, exerciseNote: string) {
     setExerciseLogs((current) =>
-      current.map((exercise, i) => (i === exerciseIndex ? { ...exercise, exerciseNote } : exercise)),
+      current.map((exercise, i) =>
+        i === exerciseIndex ? { ...exercise, exerciseNote } : exercise,
+      ),
     );
   }
 
@@ -249,7 +412,7 @@ export default function WorkoutLogScreen() {
         i === exerciseIndex
           ? {
               ...exercise,
-              sets: [...exercise.sets, createSetDraft(exercise.targetReps, exercise.targetWeight, exercise.targetRestSeconds)],
+              sets: [...exercise.sets, createSetDraft(exercise.targetRestSeconds)],
             }
           : exercise,
       ),
@@ -266,47 +429,32 @@ export default function WorkoutLogScreen() {
     );
   }
 
-  function completeExercise(exerciseIndex: number) {
-    setExerciseLogs((current) =>
-      current.map((exercise, i) => {
-        if (i !== exerciseIndex) return exercise;
-        const nextCompleted = !exercise.completed;
-        return {
-          ...exercise,
-          completed: nextCompleted,
-          sets: exercise.sets.map((set) => ({ ...set, done: nextCompleted ? true : set.done })),
-        };
-      }),
-    );
-  }
-
   function startRest(seconds: number, label: string) {
-    setTimerSeconds(seconds);
-    setTimerLabel(label);
-    setTimerRunning(seconds > 0);
+    const now = Date.now();
+    setClockNow(now);
+    setRestClock({ deadline: seconds > 0 ? now + seconds * 1000 : null, pausedSeconds: 0, label });
     setTimerFinished(false);
   }
 
   function extendTimer(seconds: number) {
-    setTimerSeconds((current) => current + seconds);
-    setTimerFinished(false);
-    setTimerRunning(true);
+    startRest(remainingRestSeconds(restClock) + seconds, timerLabel ?? "Descanso");
   }
 
   function pauseTimer() {
-    setTimerRunning(false);
+    setRestClock((current) => ({
+      ...current,
+      pausedSeconds: remainingRestSeconds(current),
+      deadline: null,
+    }));
   }
 
   function resetTimer() {
-    setTimerRunning(false);
-    setTimerSeconds(0);
-    setTimerLabel(null);
+    setRestClock(emptyRestClock);
     setTimerFinished(false);
   }
 
   function skipTimer() {
-    setTimerRunning(false);
-    setTimerSeconds(0);
+    setRestClock(emptyRestClock);
     setTimerFinished(true);
     void notifyRestFinished("Descanso saltado manualmente");
   }
@@ -325,7 +473,9 @@ export default function WorkoutLogScreen() {
         [
           "Actua como coach de entrenamiento seguro, claro y practico.",
           `Rutina: ${workout.name}. Objetivo: ${workout.goal ?? "no definido"}. Dia: ${selectedDay.name}.`,
-          aiInstructions ? `Instrucciones personales del usuario: ${aiInstructions}` : "Sin instrucciones personales guardadas.",
+          aiInstructions
+            ? `Instrucciones personales del usuario: ${aiInstructions}`
+            : "Sin instrucciones personales guardadas.",
           `Ejercicio actual: ${exercise.exerciseName}. Musculos: ${exercise.primaryMuscles.join(", ")}. Equipo: ${exercise.equipment}.`,
           `Plan: ${exercise.targetSets} series x ${exercise.targetReps}, descanso ${exercise.targetRestSeconds}s.`,
           `Solicitud del usuario: ${userPrompt}`,
@@ -356,7 +506,12 @@ export default function WorkoutLogScreen() {
     updateExerciseNote(exerciseIndex, appendNote(exercise.exerciseNote, note));
     setAiStates((current) => ({
       ...current,
-      [exercise.workoutDayExerciseId]: { ...current[exercise.workoutDayExerciseId], loading: false, response: suggestion, applied: "today" },
+      [exercise.workoutDayExerciseId]: {
+        ...current[exercise.workoutDayExerciseId],
+        loading: false,
+        response: suggestion,
+        applied: "today",
+      },
     }));
   }
 
@@ -364,8 +519,8 @@ export default function WorkoutLogScreen() {
     const exercise = exerciseLogs[exerciseIndex];
     if (!exercise) return;
     Alert.alert(
-      "Aplicar a rutina base",
-      "Guardare la sugerencia como nota permanente dentro de la descripcion de esta rutina. No reemplaza automaticamente el ejercicio hasta que editemos el constructor completo.",
+      "Guardar consejo como nota",
+      "Este consejo se agregará a la descripción de tu rutina. Para reemplazar el ejercicio o cambiar series, abre el editor de rutina.",
       [
         { text: "Cancelar", style: "cancel" },
         { text: "Aplicar", onPress: () => void applyAiPermanently(exerciseIndex) },
@@ -388,7 +543,12 @@ export default function WorkoutLogScreen() {
       setWorkout({ ...workout, description: nextDescription });
       setAiStates((current) => ({
         ...current,
-        [exercise.workoutDayExerciseId]: { ...current[exercise.workoutDayExerciseId], loading: false, response: suggestion, applied: "permanent" },
+        [exercise.workoutDayExerciseId]: {
+          ...current[exercise.workoutDayExerciseId],
+          loading: false,
+          response: suggestion,
+          applied: "permanent",
+        },
       }));
     } catch (caught) {
       setAiStates((current) => ({
@@ -404,56 +564,47 @@ export default function WorkoutLogScreen() {
   }
 
   async function save() {
-    if (!profileId || !workout || !selectedDay) return;
-
-    const sets = exerciseLogs.flatMap((exercise) =>
-      exercise.sets
-        .map((set, index) => ({
-          exercise,
-          set,
-          index,
-        }))
-        .filter(({ set }) => set.done || set.reps.trim() || set.weight.trim() || set.rpe.trim())
-        .map(({ exercise, set, index }) => ({
-          exerciseId: exercise.exerciseId,
-          setIndex: index + 1,
-          reps: parseIntOrNull(set.reps),
-          weight: parseFloatOrNull(set.weight),
-          rpe: parseFloatOrNull(set.rpe),
-          restSeconds: parseIntOrNull(set.restSeconds),
-          notes: appendNote(set.notes.trim(), exercise.exerciseNote.trim()) || null,
-        })),
-    );
-
-    if (sets.some((set) => !set.exerciseId)) {
-      setError("Hay un ejercicio sin ID valido. Vuelve a crear la rutina desde el catalogo actualizado.");
+    if (!profileId || !workout || !selectedDay || saveInFlight.current || draftReady !== draftKey)
       return;
-    }
-
-    if (sets.length === 0) {
-      setError("Registra al menos una serie antes de guardar.");
-      return;
-    }
-
+    saveInFlight.current = true;
     setSaving(true);
     setError(null);
     try {
+      const sets = completedSessionSets(exerciseLogs);
+      if (sets.length === 0)
+        throw new Error("Marca al menos una serie como realizada antes de guardar.");
       const payload: CreateWorkoutLogInput = {
         startedAt,
         endedAt: new Date().toISOString(),
-        perceivedEffort: parseIntOrNull(effort),
+        perceivedEffort: parseSessionEffort(effort),
         notes: notes.trim() || null,
         workoutId: workout.id,
         workoutDayId: selectedDay.id,
         sets,
       };
       await api.workouts.createLog(profileId, payload);
+      sessionSaved.current = true;
+      await draftWrites.current;
+      if (draftKey) await deviceStorage.removeItem(draftKey).catch(() => undefined);
       router.replace("/workouts/history");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "No se pudo guardar el entrenamiento.");
     } finally {
       setSaving(false);
+      saveInFlight.current = false;
     }
+  }
+
+  function restartSession() {
+    if (!selectedDay) return;
+    setExerciseLogs(buildExerciseLogs(selectedDay, catalog));
+    setStartedAt(new Date().toISOString());
+    setEffort("");
+    setNotes("");
+    setAiStates({});
+    resetTimer();
+    setDraftMessage(null);
+    setError(null);
   }
 
   if (loading) {
@@ -464,6 +615,7 @@ export default function WorkoutLogScreen() {
     return (
       <Screen>
         <Title>Registrar entrenamiento</Title>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
         <Card>
           <EmptyState
             title="No hay rutina activa"
@@ -487,7 +639,9 @@ export default function WorkoutLogScreen() {
             running={timerRunning}
             finished={timerFinished}
             label={timerLabel}
-            onToggle={() => setTimerRunning((current) => (timerSeconds > 0 ? !current : false))}
+            onToggle={() =>
+              timerRunning ? pauseTimer() : startRest(timerSeconds, timerLabel ?? "Descanso")
+            }
             onExtend={() => extendTimer(30)}
             onDismiss={resetTimer}
           />
@@ -508,19 +662,37 @@ export default function WorkoutLogScreen() {
         completedExercises={completedExercises}
       />
 
-      <RestTimerCard
-        seconds={timerSeconds}
-        running={timerRunning}
-        label={timerLabel}
-        defaultRestSeconds={defaultRestSeconds}
-        finished={timerFinished}
-        onDefaultRestChange={setDefaultRestSeconds}
-        onStart={() => setTimerRunning(timerSeconds > 0)}
-        onPause={pauseTimer}
-        onReset={resetTimer}
-        onSkip={skipTimer}
-        onPreset={(seconds) => startRest(seconds, "Descanso libre")}
-      />
+      <Pressable
+        onPress={() => setShowTimerSettings((current) => !current)}
+        style={styles.restButton}
+      >
+        <Timer size={17} color={colors.primary} />
+        <Text style={styles.restButtonText}>
+          {showTimerSettings
+            ? "Ocultar descanso"
+            : "Descanso automático al completar cada serie · Ajustar"}
+        </Text>
+      </Pressable>
+      {showTimerSettings ? (
+        <RestTimerCard
+          seconds={timerSeconds}
+          running={timerRunning}
+          label={timerLabel}
+          defaultRestSeconds={defaultRestSeconds}
+          finished={timerFinished}
+          onDefaultRestChange={setDefaultRestSeconds}
+          onStart={() =>
+            startRest(
+              timerSeconds || parseIntOrNull(defaultRestSeconds) || 90,
+              timerLabel ?? "Descanso libre",
+            )
+          }
+          onPause={pauseTimer}
+          onReset={resetTimer}
+          onSkip={skipTimer}
+          onPreset={(seconds) => startRest(seconds, "Descanso libre")}
+        />
+      ) : null}
 
       <Card>
         <Text style={styles.sectionTitle}>Dia de rutina</Text>
@@ -530,6 +702,7 @@ export default function WorkoutLogScreen() {
             return (
               <Pressable
                 key={day.id}
+                disabled={saving || draftReady !== draftKey}
                 onPress={() => setSelectedDayIndex(index)}
                 style={[styles.dayChip, active ? styles.dayChipActive : null]}
               >
@@ -540,7 +713,14 @@ export default function WorkoutLogScreen() {
             );
           })}
         </View>
-        {aiInstructions ? <Text style={styles.aiContext}>IA considera: {aiInstructions}</Text> : null}
+        <Text style={styles.exerciseTarget}>
+          {completedSets} de {totalSets} series realizadas · Solo se guardan las marcadas ✓.
+        </Text>
+        {draftMessage ? <Text style={styles.aiContext}>{draftMessage}</Text> : null}
+        {draftMessage?.startsWith("Borrador recuperado") ? (
+          <AppButton label="Empezar sesión nueva" variant="secondary" onPress={restartSession} />
+        ) : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
       </Card>
 
       {exerciseLogs.length === 0 ? (
@@ -552,23 +732,26 @@ export default function WorkoutLogScreen() {
         </Card>
       ) : null}
 
-      {exerciseLogs.map((exercise, exerciseIndex) => (
-        <ExerciseLogCard
-          key={exercise.workoutDayExerciseId}
-          exercise={exercise}
-          exerciseIndex={exerciseIndex}
-          aiState={aiStates[exercise.workoutDayExerciseId]}
-          onUpdateSet={updateSet}
-          onUpdateExerciseNote={updateExerciseNote}
-          onAddSet={addSet}
-          onRemoveSet={removeSet}
-          onComplete={completeExercise}
-          onStartRest={startRest}
-          onAskAi={askExerciseAi}
-          onApplyToday={applyAiForToday}
-          onApplyPermanent={confirmApplyPermanent}
-        />
-      ))}
+      {draftReady !== draftKey ? (
+        <LoadingState label="Recuperando tu sesión..." />
+      ) : (
+        exerciseLogs.map((exercise, exerciseIndex) => (
+          <ExerciseLogCard
+            key={exercise.workoutDayExerciseId}
+            exercise={exercise}
+            exerciseIndex={exerciseIndex}
+            aiState={aiStates[exercise.workoutDayExerciseId]}
+            onUpdateSet={updateSet}
+            onUpdateExerciseNote={updateExerciseNote}
+            onAddSet={addSet}
+            onRemoveSet={removeSet}
+            onStartRest={startRest}
+            onAskAi={askExerciseAi}
+            onApplyToday={applyAiForToday}
+            onApplyPermanent={confirmApplyPermanent}
+          />
+        ))
+      )}
 
       <Card>
         <Text style={styles.sectionTitle}>Cierre del entrenamiento</Text>
@@ -595,7 +778,13 @@ export default function WorkoutLogScreen() {
           multiline
         />
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <AppButton label="Guardar entrenamiento" icon={Save} loading={saving} onPress={save} />
+        <AppButton
+          label={`Finalizar · Guardar ${completedSets} series`}
+          icon={Save}
+          loading={saving}
+          disabled={draftReady !== draftKey || completedSets === 0}
+          onPress={save}
+        />
       </Card>
     </Screen>
   );
@@ -626,7 +815,9 @@ function WorkoutSessionHero({
         </View>
         <View style={styles.heroBadge}>
           <Zap size={16} color={colors.energy} />
-          <Text style={styles.heroBadgeText}>{completedExercises}/{exerciseCount}</Text>
+          <Text style={styles.heroBadgeText}>
+            {completedExercises}/{exerciseCount}
+          </Text>
         </View>
       </View>
       <View style={styles.statsRow}>
@@ -638,7 +829,15 @@ function WorkoutSessionHero({
   );
 }
 
-function StatTile({ icon: Icon, value, label }: { icon: typeof Dumbbell; value: string; label: string }) {
+function StatTile({
+  icon: Icon,
+  value,
+  label,
+}: {
+  icon: typeof Dumbbell;
+  value: string;
+  label: string;
+}) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
@@ -682,10 +881,16 @@ function RestTimerCard({
     <Card style={[styles.timerCard, finished ? styles.timerCardDone : null]}>
       <View style={styles.timerHeader}>
         <View style={styles.timerIcon}>
-          {finished ? <Bell size={20} color={colors.onPrimary} /> : <Timer size={20} color={colors.onPrimary} />}
+          {finished ? (
+            <Bell size={20} color={colors.onPrimary} />
+          ) : (
+            <Timer size={20} color={colors.onPrimary} />
+          )}
         </View>
         <View style={styles.timerTextCol}>
-          <Text style={styles.timerTitle}>{finished ? "Descanso terminado" : "Cronometro de descanso"}</Text>
+          <Text style={styles.timerTitle}>
+            {finished ? "Descanso terminado" : "Cronometro de descanso"}
+          </Text>
           <Text style={styles.timerSubtitle}>{label ?? "Configurable por ejercicio o serie"}</Text>
         </View>
         <View style={styles.defaultRestBox}>
@@ -703,7 +908,11 @@ function RestTimerCard({
       <Text style={styles.timerValue}>{formatTime(seconds)}</Text>
       <View style={styles.timerControls}>
         <Pressable onPress={running ? onPause : onStart} style={styles.timerButton}>
-          {running ? <Pause size={18} color={colors.text} /> : <Play size={18} color={colors.text} />}
+          {running ? (
+            <Pause size={18} color={colors.text} />
+          ) : (
+            <Play size={18} color={colors.text} />
+          )}
           <Text style={styles.timerButtonText}>{running ? "Pausar" : "Iniciar"}</Text>
         </Pressable>
         <Pressable onPress={onReset} style={styles.timerButton}>
@@ -752,7 +961,11 @@ function FloatingRestTimer({
   return (
     <View style={[styles.floatingTimer, finished ? styles.floatingTimerDone : null]}>
       <View style={styles.floatingTimerIcon}>
-        {finished ? <Bell size={18} color={colors.onPrimary} /> : <Timer size={18} color={colors.onPrimary} />}
+        {finished ? (
+          <Bell size={18} color={colors.onPrimary} />
+        ) : (
+          <Timer size={18} color={colors.onPrimary} />
+        )}
       </View>
       <View style={styles.floatingTimerTextCol}>
         <Text style={styles.floatingTimerValue}>{finished ? "¡Listo!" : formatTime(seconds)}</Text>
@@ -765,7 +978,11 @@ function FloatingRestTimer({
       {finished ? null : (
         <>
           <Pressable onPress={onToggle} hitSlop={6} style={styles.floatingTimerButton}>
-            {running ? <Pause size={17} color={colors.text} /> : <Play size={17} color={colors.text} />}
+            {running ? (
+              <Pause size={17} color={colors.text} />
+            ) : (
+              <Play size={17} color={colors.text} />
+            )}
           </Pressable>
           <Pressable onPress={onExtend} hitSlop={6} style={styles.floatingTimerButton}>
             <Text style={styles.floatingTimerExtend}>+30s</Text>
@@ -787,7 +1004,6 @@ function ExerciseLogCard({
   onUpdateExerciseNote,
   onAddSet,
   onRemoveSet,
-  onComplete,
   onStartRest,
   onAskAi,
   onApplyToday,
@@ -800,7 +1016,7 @@ function ExerciseLogCard({
   onUpdateExerciseNote: (exerciseIndex: number, note: string) => void;
   onAddSet: (exerciseIndex: number) => void;
   onRemoveSet: (exerciseIndex: number) => void;
-  onComplete: (exerciseIndex: number) => void;
+
   onStartRest: (seconds: number, label: string) => void;
   onAskAi: (exerciseIndex: number, prompt: string) => void;
   onApplyToday: (exerciseIndex: number) => void;
@@ -808,194 +1024,236 @@ function ExerciseLogCard({
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-
-  if (exercise.completed) {
-    return (
-      <Card style={styles.exerciseCollapsedCard}>
-        <Pressable onPress={() => onComplete(exerciseIndex)} style={styles.exerciseCollapsedRow}>
-          <View style={[styles.exerciseNumber, styles.exerciseNumberDone]}>
-            <Text style={styles.exerciseNumberText}>{exerciseIndex + 1}</Text>
-          </View>
-          <Text style={styles.exerciseCollapsedName}>{exercise.exerciseName}</Text>
-          <View style={styles.exerciseCollapsedCheck}>
-            <CheckCircle2 size={20} color={colors.onPrimary} />
-          </View>
-        </Pressable>
-      </Card>
-    );
-  }
-
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [customPrompt, setCustomPrompt] = useState("");
+  const done = exercise.sets.filter((set) => set.done).length;
   return (
-    <Card style={[styles.exerciseCard, exercise.completed ? styles.exerciseCardDone : null]}>
+    <Card
+      style={[styles.exerciseCard, done === exercise.sets.length ? styles.exerciseCardDone : null]}
+    >
       <View style={styles.exerciseHeader}>
-        <View style={styles.exerciseNumber}>
+        <View
+          style={[
+            styles.exerciseNumber,
+            done === exercise.sets.length ? styles.exerciseNumberDone : null,
+          ]}
+        >
           <Text style={styles.exerciseNumberText}>{exerciseIndex + 1}</Text>
         </View>
         <View style={styles.exerciseTitleCol}>
           <Text style={styles.exerciseName}>{exercise.exerciseName}</Text>
           <Text style={styles.exerciseTarget}>
-            {exercise.primaryMuscles.join(", ") || "General"} - {exercise.equipment}
+            {exercise.targetSets} series × {exercise.targetReps} · {exercise.targetRestSeconds}s
+            descanso
           </Text>
         </View>
-        <Pressable onPress={() => onComplete(exerciseIndex)} style={[styles.completeButton, exercise.completed ? styles.completeButtonOn : null]}>
-          <CheckCircle2 size={19} color={exercise.completed ? colors.onPrimary : colors.text} />
-        </Pressable>
+        <Text style={styles.heroBadgeText}>
+          {done}/{exercise.sets.length}
+        </Text>
       </View>
-
-      <View style={styles.planGrid}>
-        <PlanPill label="Plan" value={`${exercise.targetSets} x ${exercise.targetReps || "reps"}`} />
-        <PlanPill label="Peso" value={exercise.targetWeight ? `${exercise.targetWeight} kg` : "Libre"} />
-        <PlanPill label="RPE" value="0-10" />
-        <PlanPill label="Descanso" value={`${exercise.targetRestSeconds} seg`} />
+      {exercise.plannedNotes ? (
+        <Text style={styles.exerciseTarget}>{exercise.plannedNotes}</Text>
+      ) : null}
+      <View style={styles.seriesTableHeader}>
+        <Text style={styles.seriesNumber}>SERIE</Text>
+        <Text style={styles.seriesColumn}>KG</Text>
+        <Text style={styles.seriesColumn}>REPS</Text>
+        <Text style={styles.seriesCheckLabel}>HECHA</Text>
       </View>
-
-      <View style={styles.exerciseActionsRow}>
-        <Pressable
-          onPress={() =>
-            router.push({
-              pathname: "/exercises/[exerciseId]",
-              params: { exerciseId: exercise.exerciseId, exerciseName: exercise.exerciseName, returnTo: "workout-log" },
-            })
-          }
-          style={styles.toolButton}
-        >
-          <Eye size={16} color={colors.primary} />
-          <Text style={styles.toolButtonText}>Detalle</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => onAskAi(exerciseIndex, "Dame una alternativa equivalente y segura para este ejercicio.")}
-          style={styles.toolButton}
-        >
-          <Bot size={16} color={colors.primary} />
-          <Text style={styles.toolButtonText}>IA alternativa</Text>
-        </Pressable>
-      </View>
-
       {exercise.sets.map((set, setIndex) => (
         <View
           key={`${exercise.workoutDayExerciseId}-${setIndex}`}
-          style={[styles.setBox, set.done ? styles.setBoxDone : null]}
+          style={[styles.seriesRow, set.done ? styles.setBoxDone : null]}
         >
-          {set.done ? (
-            <Pressable
-              onPress={() => onUpdateSet(exerciseIndex, setIndex, { done: !set.done })}
-              style={styles.setCollapsedRow}
-            >
-              <View style={styles.setCollapsedIcon}>
-                <CheckCircle2 size={18} color={colors.onPrimary} />
-              </View>
-              <Text style={styles.setCollapsedTitle}>Serie {setIndex + 1} completada</Text>
-              <Text style={styles.setCollapsedMeta}>
-                {set.reps || "-"} reps{set.weight ? ` - ${set.weight} kg` : ""}{set.rpe ? ` - RPE ${set.rpe}` : ""}
-              </Text>
-            </Pressable>
-          ) : (
-            <>
-              <View style={styles.setHeader}>
-                <Pressable
-                  onPress={() => onUpdateSet(exerciseIndex, setIndex, { done: !set.done })}
-                  style={styles.doneButton}
-                >
-                  <CheckCircle2 size={17} color={colors.muted} />
-                  <Text style={styles.doneText}>Serie {setIndex + 1}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() =>
-                    onStartRest(Number(set.restSeconds) || exercise.targetRestSeconds, `${exercise.exerciseName} - serie ${setIndex + 1}`)
-                  }
-                  style={styles.restButton}
-                >
-                  <Timer size={15} color={colors.primary} />
-                  <Text style={styles.restButtonText}>Descanso</Text>
-                </Pressable>
-              </View>
+          <Text style={styles.seriesNumber}>{setIndex + 1}</Text>
+          <TextInput
+            accessibilityLabel={`${exercise.exerciseName}, serie ${setIndex + 1}, kilos`}
+            value={set.weight}
+            onChangeText={(weight) => onUpdateSet(exerciseIndex, setIndex, { weight })}
+            keyboardType="decimal-pad"
+            placeholder={exercise.targetWeight || "—"}
+            placeholderTextColor={colors.muted}
+            style={styles.seriesInput}
+          />
+          <TextInput
+            accessibilityLabel={`${exercise.exerciseName}, serie ${setIndex + 1}, repeticiones`}
+            value={set.reps}
+            onChangeText={(reps) => onUpdateSet(exerciseIndex, setIndex, { reps })}
+            keyboardType="number-pad"
+            placeholder={exercise.targetReps}
+            placeholderTextColor={colors.muted}
+            style={styles.seriesInput}
+          />
+          <Pressable
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: set.done }}
+            accessibilityLabel={`Completar ${exercise.exerciseName}, serie ${setIndex + 1}`}
+            onPress={() => onUpdateSet(exerciseIndex, setIndex, { done: !set.done })}
+            style={[styles.seriesCheck, set.done ? styles.completeButtonOn : null]}
+          >
+            <CheckCircle2 size={23} color={set.done ? colors.onPrimary : colors.muted} />
+          </Pressable>
+        </View>
+      ))}
+      <View style={styles.setActions}>
+        <Pressable
+          accessibilityLabel={`Añadir serie a ${exercise.exerciseName}`}
+          onPress={() => onAddSet(exerciseIndex)}
+          style={styles.setAction}
+        >
+          <Plus size={16} color={colors.primary} />
+          <Text style={styles.setActionText}>Serie</Text>
+        </Pressable>
+        {exercise.sets.length > 1 && !exercise.sets[exercise.sets.length - 1]?.done ? (
+          <Pressable onPress={() => onRemoveSet(exerciseIndex)} style={styles.setAction}>
+            <Minus size={16} color={colors.primary} />
+            <Text style={styles.setActionText}>Quitar última</Text>
+          </Pressable>
+        ) : null}
+        <Pressable onPress={() => setDetailsOpen((current) => !current)} style={styles.setAction}>
+          <Text style={styles.setActionText}>{detailsOpen ? "Menos" : "Detalles"}</Text>
+        </Pressable>
+      </View>
+      {detailsOpen ? (
+        <View style={styles.detailStack}>
+          <Text style={styles.exerciseTarget}>
+            {exercise.primaryMuscles.join(", ")} · {exercise.equipment}
+          </Text>
+          <AppButton
+            label="Ver técnica del ejercicio"
+            icon={Eye}
+            variant="secondary"
+            onPress={() =>
+              router.push({
+                pathname: "/exercises/[exerciseId]",
+                params: {
+                  exerciseId: exercise.exerciseId,
+                  exerciseName: exercise.exerciseName,
+                  returnTo: "workout-log",
+                },
+              })
+            }
+          />
+          {exercise.sets.map((set, setIndex) => (
+            <View key={setIndex} style={styles.setBox}>
+              <Text style={styles.label}>Serie {setIndex + 1} · datos opcionales</Text>
               <View style={styles.setInputs}>
-                <SetInput label="Reps" value={set.reps} onChange={(value) => onUpdateSet(exerciseIndex, setIndex, { reps: value })} />
-                <SetInput label="Kg" value={set.weight} onChange={(value) => onUpdateSet(exerciseIndex, setIndex, { weight: value })} />
-                <SetInput label="RPE" value={set.rpe} onChange={(value) => onUpdateSet(exerciseIndex, setIndex, { rpe: value })} />
-                <SetInput label="Desc." value={set.restSeconds} onChange={(value) => onUpdateSet(exerciseIndex, setIndex, { restSeconds: value })} />
+                <SetInput
+                  label="RPE 0–10"
+                  value={set.rpe}
+                  onChange={(rpe) => onUpdateSet(exerciseIndex, setIndex, { rpe })}
+                />
+                <SetInput
+                  label="Descanso (s)"
+                  value={set.restSeconds}
+                  onChange={(restSeconds) => onUpdateSet(exerciseIndex, setIndex, { restSeconds })}
+                />
               </View>
               <TextInput
                 value={set.notes}
-                onChangeText={(value) => onUpdateSet(exerciseIndex, setIndex, { notes: value })}
+                onChangeText={(notes) => onUpdateSet(exerciseIndex, setIndex, { notes })}
                 placeholder="Nota de esta serie"
                 placeholderTextColor={colors.muted}
                 style={styles.setNotes}
               />
-            </>
-          )}
+            </View>
+          ))}
+          <TextInput
+            value={exercise.exerciseNote}
+            onChangeText={(note) => onUpdateExerciseNote(exerciseIndex, note)}
+            placeholder="Notas del ejercicio"
+            placeholderTextColor={colors.muted}
+            style={styles.exerciseNotes}
+            multiline
+          />
+          <AppButton
+            label={`Descansar ${exercise.targetRestSeconds}s`}
+            icon={Timer}
+            variant="secondary"
+            onPress={() => onStartRest(exercise.targetRestSeconds, exercise.exerciseName)}
+          />
         </View>
-      ))}
-
-      <View style={styles.setActions}>
-        <Pressable onPress={() => onAddSet(exerciseIndex)} style={styles.setAction}>
-          <Plus size={16} color={colors.primary} />
-          <Text style={styles.setActionText}>Agregar serie</Text>
-        </Pressable>
-        <Pressable onPress={() => onRemoveSet(exerciseIndex)} style={styles.setAction}>
-          <Minus size={16} color={colors.primary} />
-          <Text style={styles.setActionText}>Quitar ultima</Text>
-        </Pressable>
-      </View>
-
-      <Text style={styles.label}>Notas del ejercicio</Text>
-      <TextInput
-        value={exercise.exerciseNote}
-        onChangeText={(value) => onUpdateExerciseNote(exerciseIndex, value)}
-        placeholder="Ajustes de hoy, molestias, cambio temporal..."
-        placeholderTextColor={colors.muted}
-        style={styles.exerciseNotes}
-        multiline
-      />
-
-      <View style={styles.aiQuickGrid}>
-        {quickAiActions.map((action) => (
-          <Pressable key={action.label} onPress={() => onAskAi(exerciseIndex, action.prompt)} style={styles.aiQuickChip}>
-            <Sparkles size={13} color={colors.energy} />
-            <Text style={styles.aiQuickText}>{action.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {aiState?.loading ? <LoadingState label="La IA esta revisando este ejercicio..." /> : null}
-      {aiState?.error ? <Text style={styles.error}>{aiState.error}</Text> : null}
-      {aiState?.response ? (
-        <View style={styles.aiBox}>
-          <Text style={styles.aiTitle}>Sugerencia IA</Text>
-          <Text style={styles.aiResponse}>{aiState.response}</Text>
-          <View style={styles.aiApplyRow}>
-            <Pressable onPress={() => onApplyToday(exerciseIndex)} style={styles.aiApplyButton}>
-              <RefreshCcw size={15} color={colors.onPrimary} />
-              <Text style={styles.aiApplyText}>Solo por hoy</Text>
-            </Pressable>
-            <Pressable onPress={() => onApplyPermanent(exerciseIndex)} style={[styles.aiApplyButton, styles.aiApplySecondary]}>
-              <Save size={15} color={colors.primary} />
-              <Text style={[styles.aiApplyText, styles.aiApplyTextSecondary]}>Rutina base</Text>
-            </Pressable>
+      ) : null}
+      <Pressable onPress={() => setAiOpen((current) => !current)} style={styles.aiDisclosure}>
+        <Sparkles size={16} color={colors.primary} />
+        <Text style={styles.toolButtonText}>
+          {aiOpen ? "Cerrar ayuda IA" : "Necesito un ajuste o una alternativa"}
+        </Text>
+      </Pressable>
+      {aiOpen ? (
+        <View style={styles.detailStack}>
+          <View style={styles.aiQuickGrid}>
+            {quickAiActions.map((action) => (
+              <Pressable
+                key={action.label}
+                disabled={aiState?.loading}
+                onPress={() => onAskAi(exerciseIndex, action.prompt)}
+                style={styles.aiQuickChip}
+              >
+                <Text style={styles.aiQuickText}>{action.label}</Text>
+              </Pressable>
+            ))}
           </View>
-          {aiState.applied ? (
-            <Text style={styles.appliedText}>
-              Aplicado: {aiState.applied === "today" ? "solo en este entrenamiento" : "nota permanente en la rutina"}.
-            </Text>
+          <TextInput
+            value={customPrompt}
+            onChangeText={setCustomPrompt}
+            placeholder="Escribe exactamente qué necesitas cambiar"
+            placeholderTextColor={colors.muted}
+            style={styles.exerciseNotes}
+            multiline
+          />
+          <AppButton
+            label="Consultar ajuste"
+            icon={Bot}
+            loading={aiState?.loading ?? false}
+            disabled={!customPrompt.trim()}
+            onPress={() => onAskAi(exerciseIndex, customPrompt.trim())}
+          />
+          {aiState?.error ? <Text style={styles.error}>{aiState.error}</Text> : null}
+          {aiState?.response ? (
+            <View style={styles.aiBox}>
+              <Text style={styles.aiResponse}>{aiState.response}</Text>
+              <Text style={styles.exerciseTarget}>
+                Guardar el consejo añade una nota. Para cambiar ejercicios o series, abre el editor.
+              </Text>
+              <AppButton
+                label="Guardar consejo en esta sesión"
+                variant="secondary"
+                onPress={() => onApplyToday(exerciseIndex)}
+              />
+              <AppButton
+                label="Guardar consejo en la rutina"
+                variant="secondary"
+                onPress={() => onApplyPermanent(exerciseIndex)}
+              />
+              <AppButton
+                label="Abrir editor de rutina"
+                variant="ghost"
+                onPress={() => router.push("/workouts")}
+              />
+              {aiState.applied ? (
+                <Text style={styles.appliedText}>
+                  Consejo guardado como nota{" "}
+                  {aiState.applied === "today" ? "de esta sesión" : "de la rutina"}.
+                </Text>
+              ) : null}
+            </View>
           ) : null}
         </View>
       ) : null}
     </Card>
   );
 }
-
-function PlanPill({ label, value }: { label: string; value: string }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  return (
-    <View style={styles.planPill}>
-      <Text style={styles.planLabel}>{label}</Text>
-      <Text style={styles.planValue}>{value}</Text>
-    </View>
-  );
-}
-
-function SetInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function SetInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
@@ -1017,20 +1275,34 @@ function sortDays(days: WorkoutDayDetail[]): WorkoutDayDetail[] {
   return days.slice().sort((a, b) => a.dayIndex - b.dayIndex);
 }
 
-function findInitialDayIndex(days: WorkoutDayDetail[], workoutDayId?: string, dayIndex?: number): number {
+function findInitialDayIndex(
+  days: WorkoutDayDetail[],
+  workoutDayId?: string,
+  dayIndex?: number,
+): number {
   const byId = workoutDayId ? days.findIndex((day) => day.id === workoutDayId) : -1;
   if (byId >= 0) return byId;
-  if (Number.isFinite(dayIndex) && dayIndex !== undefined && dayIndex >= 0 && dayIndex < days.length) {
+  if (
+    Number.isFinite(dayIndex) &&
+    dayIndex !== undefined &&
+    dayIndex >= 0 &&
+    dayIndex < days.length
+  ) {
     return dayIndex;
   }
   return 0;
 }
 
-function buildExerciseLogs(day: WorkoutDayDetail, catalog: ExerciseCatalogItem[]): ExerciseLogDraft[] {
+function buildExerciseLogs(
+  day: WorkoutDayDetail,
+  catalog: ExerciseCatalogItem[],
+): ExerciseLogDraft[] {
   return (day.workoutDayExercises ?? []).map((entry) => {
     const name = entry.exercises?.name ?? "Ejercicio";
-    const exerciseId = entry.exerciseId ?? entry.exercises?.id ?? findExerciseIdByName(catalog, name);
-    const catalogItem = catalog.find((exercise) => exercise.id === exerciseId) ?? findExerciseByName(catalog, name);
+    const exerciseId =
+      entry.exerciseId ?? entry.exercises?.id ?? findExerciseIdByName(catalog, name);
+    const catalogItem =
+      catalog.find((exercise) => exercise.id === exerciseId) ?? findExerciseByName(catalog, name);
     const targetSets = Math.max(1, entry.targetSets ?? catalogItem?.defaultSets ?? 3);
     const targetReps = entry.targetReps ?? catalogItem?.defaultReps ?? "8-10";
     const targetRestSeconds = entry.restSeconds ?? catalogItem?.defaultRestSeconds ?? 90;
@@ -1048,25 +1320,24 @@ function buildExerciseLogs(day: WorkoutDayDetail, catalog: ExerciseCatalogItem[]
       targetWeight,
       primaryMuscleIds,
       primaryMuscles: labelMuscles(primaryMuscleIds),
-      secondaryMuscles:
-        entry.exercises?.secondaryMuscles?.length
-          ? entry.exercises.secondaryMuscles
-          : inferSecondaryMuscles(catalogItem),
+      secondaryMuscles: entry.exercises?.secondaryMuscles?.length
+        ? entry.exercises.secondaryMuscles
+        : inferSecondaryMuscles(catalogItem),
       equipment: catalogItem?.libraryEquipment ?? entry.exercises?.equipment ?? "Variable",
       tier: catalogItem?.tier ?? "situacional",
       scienceScore: catalogItem?.scienceScore ?? 45,
       plannedNotes: entry.notes ?? "",
       exerciseNote: entry.notes ?? "",
-      completed: false,
-      sets: Array.from({ length: targetSets }, () => createSetDraft(targetReps, targetWeight, targetRestSeconds)),
+
+      sets: Array.from({ length: targetSets }, () => createSetDraft(targetRestSeconds)),
     };
   });
 }
 
-function createSetDraft(targetReps: string, targetWeight: string, restSeconds: number): SetDraft {
+function createSetDraft(restSeconds: number): SetDraft {
   return {
-    reps: inferReps(targetReps),
-    weight: targetWeight,
+    reps: "",
+    weight: "",
     rpe: "",
     restSeconds: String(restSeconds),
     notes: "",
@@ -1074,16 +1345,14 @@ function createSetDraft(targetReps: string, targetWeight: string, restSeconds: n
   };
 }
 
-function inferReps(targetReps: string): string {
-  const match = targetReps.match(/\d+/);
-  return match?.[0] ?? "";
-}
-
 function findExerciseIdByName(catalog: ExerciseCatalogItem[], name: string): string {
   return findExerciseByName(catalog, name)?.id ?? "";
 }
 
-function findExerciseByName(catalog: ExerciseCatalogItem[], name: string): ExerciseCatalogItem | undefined {
+function findExerciseByName(
+  catalog: ExerciseCatalogItem[],
+  name: string,
+): ExerciseCatalogItem | undefined {
   const normalized = name.toLowerCase().trim();
   return catalog.find((exercise) => exercise.name.toLowerCase().trim() === normalized);
 }
@@ -1092,7 +1361,11 @@ function muscleIdsFromText(values?: string[]): MuscleGroupId[] {
   if (!values) return [];
   return values
     .map((value) => value.toLowerCase())
-    .map((value) => MUSCLE_GROUPS.find((muscle) => muscle.id === value || muscle.label.toLowerCase() === value)?.id)
+    .map(
+      (value) =>
+        MUSCLE_GROUPS.find((muscle) => muscle.id === value || muscle.label.toLowerCase() === value)
+          ?.id,
+    )
     .filter((value): value is MuscleGroupId => Boolean(value));
 }
 
@@ -1115,7 +1388,12 @@ function extractAiInstructions(description?: string | null): string {
   const marker = "Instrucciones personales para IA:";
   const index = description.indexOf(marker);
   if (index < 0) return "";
-  return description.slice(index + marker.length).split("\nDuracion:")[0]?.trim() ?? "";
+  return (
+    description
+      .slice(index + marker.length)
+      .split("\nDuracion:")[0]
+      ?.trim() ?? ""
+  );
 }
 
 function appendNote(current: string, addition: string): string {
@@ -1143,13 +1421,6 @@ function parseIntOrNull(value: string): number | null {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function parseFloatOrNull(value: string): number | null {
-  const trimmed = value.trim().replace(",", ".");
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-}
-
 function formatTime(seconds: number): string {
   const minutes = Math.floor(seconds / 60)
     .toString()
@@ -1162,10 +1433,69 @@ function formatTime(seconds: number): string {
 
 function makeStyles(colors: ColorPalette) {
   return StyleSheet.create({
+    detailStack: { gap: 10 },
+    aiDisclosure: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8 },
+    seriesTableHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+    seriesRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingVertical: 6,
+      borderRadius: 10,
+    },
+    seriesNumber: {
+      width: 40,
+      textAlign: "center",
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    seriesColumn: {
+      flex: 1,
+      textAlign: "center",
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    seriesCheckLabel: {
+      width: 48,
+      textAlign: "center",
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    seriesInput: {
+      flex: 1,
+      minWidth: 0,
+      minHeight: 48,
+      borderRadius: 10,
+      backgroundColor: colors.backgroundElevated,
+      color: colors.text,
+      textAlign: "center",
+      fontSize: 18,
+      fontWeight: "800",
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    seriesCheck: {
+      width: 48,
+      height: 48,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.backgroundElevated,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
     sectionTitle: { color: colors.text, fontSize: 17, fontWeight: "900" },
     label: { color: colors.muted, fontSize: 12, fontWeight: "800", marginBottom: 5 },
     heroCard: { gap: 14, backgroundColor: colors.backgroundElevated },
-    heroHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
+    heroHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: 12,
+    },
     heroLabel: { color: colors.muted, fontSize: 12, fontWeight: "800" },
     heroTitle: { color: colors.text, fontSize: 26, fontWeight: "900", marginTop: 3 },
     heroSubtitle: { color: colors.muted, fontSize: 13, lineHeight: 18, marginTop: 4 },
@@ -1219,7 +1549,12 @@ function makeStyles(colors: ColorPalette) {
       justifyContent: "center",
     },
     floatingTimerTextCol: { flex: 1, gap: 1 },
-    floatingTimerValue: { color: colors.text, fontSize: 19, fontWeight: "900", fontVariant: ["tabular-nums"] },
+    floatingTimerValue: {
+      color: colors.text,
+      fontSize: 19,
+      fontWeight: "900",
+      fontVariant: ["tabular-nums"],
+    },
     floatingTimerLabel: { color: colors.muted, fontSize: 11, fontWeight: "700" },
     floatingTimerButton: {
       minWidth: 38,
@@ -1432,7 +1767,12 @@ function makeStyles(colors: ColorPalette) {
       fontWeight: "800",
       fontSize: 12,
     },
-    setHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+    setHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 8,
+    },
     doneButton: {
       flexDirection: "row",
       alignItems: "center",
@@ -1537,7 +1877,11 @@ function makeStyles(colors: ColorPalette) {
       flexDirection: "row",
       gap: 6,
     },
-    aiApplySecondary: { backgroundColor: colors.backgroundElevated, borderWidth: 1, borderColor: colors.primary },
+    aiApplySecondary: {
+      backgroundColor: colors.backgroundElevated,
+      borderWidth: 1,
+      borderColor: colors.primary,
+    },
     aiApplyText: { color: colors.onPrimary, fontWeight: "900", fontSize: 12 },
     aiApplyTextSecondary: { color: colors.primary },
     appliedText: { color: colors.muted, fontWeight: "800", fontSize: 12 },

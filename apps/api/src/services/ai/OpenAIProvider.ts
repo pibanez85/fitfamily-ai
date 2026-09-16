@@ -29,7 +29,11 @@ import type {
   AnalyzePhotoInput,
   GenerateWorkoutInput,
 } from "./types";
-import { GeneratedWorkoutRawSchema, enrichGeneratedWorkout } from "./workoutBuilder";
+import {
+  GeneratedWorkoutRawSchema,
+  enrichGeneratedWorkout,
+  prepareWorkoutInput,
+} from "./workoutBuilder";
 
 export class OpenAIProvider implements AIProvider {
   readonly name = "openai" as const;
@@ -51,9 +55,7 @@ export class OpenAIProvider implements AIProvider {
     this.client = new OpenAI({ apiKey });
   }
 
-  async analyzeFoodPhoto(
-    input: AnalyzePhotoInput,
-  ): Promise<AIProviderResult<FoodAnalysisResult>> {
+  async analyzeFoodPhoto(input: AnalyzePhotoInput): Promise<AIProviderResult<FoodAnalysisResult>> {
     const started = Date.now();
     const response = (await this.client.responses.create({
       model: this.modelVision,
@@ -148,6 +150,10 @@ Usa este disclaimer exacto: ${GYM_MACHINE_DISCLAIMER}`,
           role: "system",
           content: [{ type: "input_text", text: chatSystemPrompt }],
         },
+        ...(input.history ?? []).map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
         {
           role: "user",
           content: [
@@ -176,7 +182,8 @@ Usa este disclaimer exacto: ${GYM_MACHINE_DISCLAIMER}`,
 
   async generateWorkout(input: GenerateWorkoutInput): Promise<AIProviderResult<GeneratedWorkout>> {
     const started = Date.now();
-    const catalogText = input.catalog
+    const prepared = prepareWorkoutInput(input);
+    const catalogText = prepared.catalog
       .map(
         (item) =>
           `${item.id} | ${item.name} | musculos: ${item.muscles.join(", ") || "varios"} | equipo: ${item.equipment ?? "variable"}`,
@@ -188,6 +195,15 @@ Usa este disclaimer exacto: ${GYM_MACHINE_DISCLAIMER}`,
       `Frecuencia: ${input.frequency} dias por semana (crea EXACTAMENTE ${input.frequency} dias).`,
       `Nivel del usuario: ${input.experienceLevel}.`,
       input.durationLabel ? `Duracion del plan: ${input.durationLabel}.` : "",
+      input.sessionMinutes
+        ? `Tiempo disponible por sesion: ${input.sessionMinutes} minutos. Ajusta volumen y descansos; incluye calentamiento y transiciones en esa estimacion.`
+        : "",
+      input.dayNames
+        ? `Dias y orden solicitados (conserva sus nombres): ${JSON.stringify(input.dayNames)}.`
+        : "",
+      input.allowedEquipment
+        ? `Equipo permitido: ${input.allowedEquipment.join(", ")}. El catalogo ya excluye equipo no disponible y ejercicios vetados.`
+        : "",
       input.instructions?.trim()
         ? `Peticion e instrucciones del usuario (PRIORIDAD MAXIMA, respetalas al pie de la letra): ${input.instructions.trim()}`
         : "El usuario no agrego instrucciones adicionales.",
@@ -229,5 +245,7 @@ Usa este disclaimer exacto: ${GYM_MACHINE_DISCLAIMER}`,
 
 function isPlaceholderKey(value: string): boolean {
   const lower = value.trim().toLowerCase();
-  return lower.includes("your-") || lower.includes("placeholder") || lower === "sk-your-server-only-key";
+  return (
+    lower.includes("your-") || lower.includes("placeholder") || lower === "sk-your-server-only-key"
+  );
 }

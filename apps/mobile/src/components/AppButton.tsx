@@ -37,7 +37,11 @@ export function AppButton({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const isDisabled = disabled || loading;
   const isFilled = variant === "primary" || variant === "danger";
-  const contentColor = isFilled ? colors.onPrimary : variant === "secondary" ? colors.text : colors.primary;
+  const contentColor = isFilled
+    ? colors.onPrimary
+    : variant === "secondary"
+      ? colors.text
+      : colors.primary;
 
   const content = (
     <>
@@ -110,10 +114,10 @@ function makeStyles(colors: ColorPalette) {
     },
     primaryShadow: {
       shadowColor: colors.primary,
-      shadowOpacity: 0.35,
-      shadowRadius: 14,
+      shadowOpacity: 0,
+      shadowRadius: 0,
       shadowOffset: { width: 0, height: 6 },
-      elevation: 5,
+      elevation: 0,
     },
     secondary: {
       backgroundColor: colors.surfaceMuted,

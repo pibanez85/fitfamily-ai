@@ -1,5 +1,15 @@
-import { router, useFocusEffect } from "expo-router";
-import { Activity, Check, Clock, Dumbbell, Pencil, Plus, Sparkles, Star, Trash2 } from "lucide-react-native";
+import { router, useFocusEffect, type Href } from "expo-router";
+import {
+  Activity,
+  Check,
+  Clock,
+  Dumbbell,
+  Pencil,
+  Plus,
+  Sparkles,
+  Star,
+  Trash2,
+} from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import type { Workout } from "@fitfamily-ai/shared";
@@ -21,7 +31,7 @@ export default function WorkoutsScreen() {
   const profileId = useActiveProfileId();
   const setActiveWorkout = useAppStore((state) => state.setActiveWorkout);
   const activeWorkoutId = useAppStore((state) =>
-    profileId ? state.activeWorkoutByProfile[profileId] ?? null : null,
+    profileId ? (state.activeWorkoutByProfile[profileId] ?? null) : null,
   );
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,9 +92,32 @@ export default function WorkoutsScreen() {
   return (
     <Screen>
       <Title>Rutinas</Title>
-      <Subtitle>Tu rutina base se ejecuta cada semana. Puedes modificarla por día con la IA.</Subtitle>
+      <Subtitle>
+        Tu rutina base se ejecuta cada semana. Puedes modificarla por día con la IA.
+      </Subtitle>
 
-      <AppButton label="Crear rutina con IA" icon={Sparkles} onPress={() => router.push("/workouts/create")} />
+      <Card style={{ backgroundColor: colors.primarySoft }}>
+        <Text style={{ color: colors.primary, fontSize: 11, fontWeight: "700", letterSpacing: 1 }}>
+          TU RUTINA DEL PDF
+        </Text>
+        <Text style={{ color: colors.text, fontSize: 21, fontWeight: "700" }}>
+          Definición · 5 días
+        </Text>
+        <BodyText>
+          Torso, piernas y prioridad brazos. Ejercicios y series del documento, con sus alternativas
+          a la vista.
+        </BodyText>
+        <AppButton
+          label="Revisar e incorporar rutina"
+          onPress={() => router.push("/workouts/import" as Href)}
+        />
+      </Card>
+
+      <AppButton
+        label="Crear rutina con IA"
+        icon={Sparkles}
+        onPress={() => router.push("/workouts/create")}
+      />
       <AppButton
         label="Crear manualmente"
         icon={Plus}
@@ -169,7 +202,10 @@ export default function WorkoutsScreen() {
                   accessibilityRole="button"
                   onPress={(event) => {
                     event.stopPropagation();
-                    router.push({ pathname: "/workouts/create", params: { workoutId: workout.id } });
+                    router.push({
+                      pathname: "/workouts/create",
+                      params: { workoutId: workout.id },
+                    });
                   }}
                   style={styles.actionPill}
                 >
@@ -183,7 +219,11 @@ export default function WorkoutsScreen() {
                     event.stopPropagation();
                     confirmDelete(workout);
                   }}
-                  style={[styles.actionPill, styles.deletePill, deletingId === workout.id ? styles.disabled : null]}
+                  style={[
+                    styles.actionPill,
+                    styles.deletePill,
+                    deletingId === workout.id ? styles.disabled : null,
+                  ]}
                 >
                   <Trash2 size={14} color={colors.danger} />
                   <Text style={[styles.actionPillText, styles.deletePillText]}>

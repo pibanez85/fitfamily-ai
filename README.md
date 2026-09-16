@@ -2,6 +2,12 @@
 
 FitFamily AI es una app mobile familiar para registrar entrenamiento, comidas, progreso fisico, fotos e interacciones con IA. Esta pensada inicialmente para uso familiar, pero con una base tecnica real para crecer a producto.
 
+## Revisión de experiencia — septiembre de 2026
+
+Diario de comidas por fecha local, registro de series realizadas con borrador recuperable, plantilla revisable de la rutina PDF de cinco días y nueva interfaz adaptable a teléfono y escritorio. La generación IA valida equipo y exclusiones y mantiene los errores visibles, sin reemplazar una solicitud fallida por una plantilla genérica.
+
+La [auditoría semanal](docs/WEEKLY_AUDIT.md) reúne el recorrido por siete fechas, los errores encontrados, las pruebas y los límites de la validación. Los datos de prueba se guardan localmente y están separados del backend real.
+
 ## Que incluye este MVP
 
 - App Expo para Android, iPhone y web.
@@ -51,6 +57,9 @@ fitfamily-ai/
 ```
 
 ## Empezar rapido en Windows
+
+Para revisar la app sin conectar servicios, ejecuta `pnpm --filter @fitfamily-ai/mobile dev:demo --lan`.
+La [guía de Expo Go para Windows y teléfono](docs/EXPO_GO_WINDOWS.md) explica compatibilidad de SDK, LAN/Tunnel y la URL de API correcta.
 
 Desde CMD:
 

@@ -7,6 +7,8 @@ import { LoadingState } from "@/components/StateViews";
 import { supabase } from "@/lib/supabase";
 import { useAppStore } from "@/store/appStore";
 import { ThemeProvider, useTheme } from "@/theme/theme";
+import { api } from "@/services/api";
+import { withTimeout } from "@/services/asyncUtils";
 
 // react-native-svg (usado por los iconos lucide) filtra mal los props del
 // sistema Responder en web y React DOM reclama con "Unknown event handler
@@ -42,14 +44,23 @@ function RootNavigator() {
 
     async function restoreSession() {
       try {
-        const { data } = await supabase.auth.getSession();
+        await useAppStore.persist.rehydrate();
+        const { data } = await withTimeout(
+          supabase.auth.getSession(),
+          12000,
+          "No pudimos recuperar la sesión.",
+        );
 
         if (!data.session) {
           if (alive) setSession(null);
           return;
         }
 
-        const { error } = await supabase.auth.getUser();
+        const { error } = await withTimeout(
+          supabase.auth.getUser(),
+          12000,
+          "No pudimos verificar la sesión.",
+        );
         if (error) {
           await supabase.auth.signOut();
           if (alive) {
@@ -60,6 +71,13 @@ function RootNavigator() {
         }
 
         if (alive) setSession(data.session);
+        const profiles = await api.profiles.list();
+        if (alive) setProfiles(profiles);
+      } catch {
+        if (alive) {
+          setSession(null);
+          setProfiles([]);
+        }
       } finally {
         if (alive) setReady(true);
       }
@@ -100,6 +118,7 @@ function RootNavigator() {
       <Stack.Screen name="workouts/index" />
       <Stack.Screen name="workouts/[workoutId]" />
       <Stack.Screen name="workouts/create" />
+      <Stack.Screen name="workouts/import" />
       <Stack.Screen name="workouts/log" />
       <Stack.Screen name="workouts/history" />
       <Stack.Screen name="workouts/progress" />

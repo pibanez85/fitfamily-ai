@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { PropsWithChildren } from "react";
-import * as SecureStore from "expo-secure-store";
+import { deviceStorage } from "@/services/localStorage";
 import { darkColors, lightColors, radius, spacing, type ColorPalette } from "@/theme/colors";
 
 export type ThemeMode = "light" | "dark";
@@ -15,13 +15,13 @@ type ThemeContextValue = {
 };
 
 const STORAGE_KEY = "fitfamily.theme.mode";
-const DEFAULT_MODE: ThemeMode = "dark";
+const DEFAULT_MODE: ThemeMode = "light";
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 async function readStoredMode(): Promise<ThemeMode | null> {
   try {
-    const value = await SecureStore.getItemAsync(STORAGE_KEY);
+    const value = await deviceStorage.getItem(STORAGE_KEY);
     return value === "light" || value === "dark" ? value : null;
   } catch {
     return null;
@@ -30,7 +30,7 @@ async function readStoredMode(): Promise<ThemeMode | null> {
 
 async function persistMode(mode: ThemeMode): Promise<void> {
   try {
-    await SecureStore.setItemAsync(STORAGE_KEY, mode);
+    await deviceStorage.setItem(STORAGE_KEY, mode);
   } catch {
     // En web o sin almacenamiento seguro simplemente no persistimos.
   }
@@ -83,7 +83,7 @@ export function useTheme(): ThemeContextValue {
     // Fallback seguro si algun componente se usa fuera del provider.
     return {
       mode: DEFAULT_MODE,
-      colors: darkColors,
+      colors: lightColors,
       radius,
       spacing,
       setMode: () => undefined,

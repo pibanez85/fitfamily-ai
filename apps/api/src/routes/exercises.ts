@@ -7,7 +7,8 @@ import {
 import { Router } from "express";
 import { validateBody, validateParams } from "../middleware/validate";
 import type { DataService } from "../services/dataService";
-import { getParam } from "../utils/http";
+import { prepareDefinitionRoutineCatalog } from "../services/definitionRoutineCatalog";
+import { getParam, requireUserId } from "../utils/http";
 
 export function createExercisesRouter(data: DataService) {
   const router = Router();
@@ -25,6 +26,17 @@ export function createExercisesRouter(data: DataService) {
     try {
       const exercise = await data.insert("exercises", req.body);
       res.status(201).json({ data: exercise });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/exercises/definition-routine", async (req, res, next) => {
+    try {
+      requireUserId(req);
+      // Exercises are a shared catalog. No profile data or client-supplied IDs are used.
+      const exercises = await prepareDefinitionRoutineCatalog(data);
+      res.json({ data: sortExercisesByEvidence(exercises) });
     } catch (error) {
       next(error);
     }

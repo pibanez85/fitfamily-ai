@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Camera, ImagePlus } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -17,6 +17,7 @@ export default function FoodPhotoScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const profileId = useActiveProfileId();
+  const params = useLocalSearchParams<{ date?: string }>();
   const setPendingFoodAnalysis = useAppStore((state) => state.setPendingFoodAnalysis);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -35,8 +36,12 @@ export default function FoodPhotoScreen() {
       }
       setStatus("Subiendo foto y preparando análisis...");
       const analysis = await api.ai.analyzeFood(profileId, upload.signedUrl);
+      if (useAppStore.getState().activeProfileId !== profileId) return;
       setPendingFoodAnalysis(analysis);
-      router.push("/meals/analysis");
+      router.push({
+        pathname: "/meals/analysis",
+        params: { ...(params.date ? { date: params.date } : {}) },
+      });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "No se pudo analizar la comida.");
     } finally {
@@ -51,8 +56,8 @@ export default function FoodPhotoScreen() {
       <Subtitle>Saca una foto a tu plato y la IA estima calorías y macros por ti.</Subtitle>
       <Card>
         <BodyText>
-          Usa buena luz y encuadra el plato completo. Si hay salsas, aceites o ingredientes ocultos, agregalos
-          despues al corregir.
+          Usa buena luz y encuadra el plato completo. Si hay salsas, aceites o ingredientes ocultos,
+          agregalos despues al corregir.
         </BodyText>
         {status ? <Text style={styles.status}>{status}</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}

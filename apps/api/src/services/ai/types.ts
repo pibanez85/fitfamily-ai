@@ -18,6 +18,7 @@ export type AIChatInput = {
   threadId: string;
   message: string;
   context: string;
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
 };
 
 export type AIChatProviderResult = {
@@ -31,6 +32,10 @@ export type GenerateWorkoutInput = {
   experienceLevel: string;
   durationLabel?: string;
   instructions?: string;
+  allowedEquipment?: string[];
+  excludedExerciseIds?: string[];
+  sessionMinutes?: number;
+  dayNames?: string[];
   catalog: WorkoutBuilderCatalogItem[];
 };
 

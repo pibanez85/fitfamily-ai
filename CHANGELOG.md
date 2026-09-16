@@ -45,6 +45,17 @@ a una sección con la fecha.
   pantalla de recortar ni falla la subida a Storage.
 - **Fecha de nacimiento** más simple: se escribe directo (DD/MM/AAAA) y muestra
   la edad al instante; se quitó el calendario y el selector de años.
+- **Registro de series de entrenamiento**: ya no se guardaban series sin marcar;
+  ahora solo cuenta lo que realmente se completó, con borrador recuperable si
+  se cierra la app a mitad de una sesión.
+- **Indicadores semanales de Avances**: la variación de peso y la mejora de
+  carga ya no mezclaban mediciones o sesiones de fuera del período elegido
+  (7d/30d/90d).
+- **Importar rutina desde el PDF**: nueva pantalla para revisar e incorporar
+  la rutina de cinco días del PDF (39 ejercicios) antes de usarla.
+- **Conexión con Expo Go en Windows con OneDrive**: se corrigió un error donde
+  Metro perdía archivos válidos del proyecto por cómo OneDrive reporta ciertos
+  archivos en Windows.
 
 ### Servidor / IA — ya activo (sin reinstalar)
 - **Coach IA más obediente**: sigue mejor lo que pide el usuario.
