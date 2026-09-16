@@ -808,6 +808,23 @@ export function normalizeExerciseName(name: string): string {
     .trim();
 }
 
+/**
+ * Arma un enlace de busqueda de YouTube filtrado a Shorts (clips cortos)
+ * para ver la tecnica de un ejercicio. No apunta a un video especifico:
+ * YouTube cambia/borra videos con el tiempo, asi que un enlace de busqueda
+ * siempre muestra resultados vigentes en vez de un link que puede romperse.
+ * sp=EgIYAQ%3D%3D es el filtro oficial de YouTube para "Shorts" en la
+ * busqueda (parametro documentado por el propio selector de filtros de YouTube).
+ */
+export function buildExerciseTechniqueVideoSearchUrl(exerciseName: string): string {
+  const query = `${exerciseName} tecnica correcta ejercicio`;
+  const params = new URLSearchParams({
+    search_query: query,
+    sp: "EgIYAQ==",
+  });
+  return `https://www.youtube.com/results?${params.toString()}`;
+}
+
 const metaByName = new Map(
   EXERCISE_LIBRARY.map((item) => [normalizeExerciseName(item.name), item]),
 );

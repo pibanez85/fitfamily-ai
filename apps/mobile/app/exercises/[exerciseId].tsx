@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   BadgePlus,
   Bot,
+  CirclePlay,
   Dumbbell,
   Heart,
   RefreshCcw,
@@ -10,10 +11,10 @@ import {
   Sparkles,
 } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from "react-native-svg";
 import type { ExerciseCatalogItem } from "@fitfamily-ai/shared";
-import { MUSCLE_GROUPS, type MuscleGroupId } from "@fitfamily-ai/shared";
+import { buildExerciseTechniqueVideoSearchUrl, MUSCLE_GROUPS, type MuscleGroupId } from "@fitfamily-ai/shared";
 import { AppButton } from "@/components/AppButton";
 import { Card } from "@/components/Card";
 import { MuscleMap } from "@/components/MuscleMap";
@@ -209,6 +210,27 @@ export default function ExerciseDetailScreen() {
   );
 }
 
+function openExerciseTechniqueVideo(exerciseName: string) {
+  const url = buildExerciseTechniqueVideoSearchUrl(exerciseName);
+  Linking.openURL(url).catch(() => undefined);
+}
+
+function WatchTechniqueButton({ exerciseName }: { exerciseName: string }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <Pressable
+      onPress={() => openExerciseTechniqueVideo(exerciseName)}
+      style={styles.watchTechniqueButton}
+      accessibilityRole="button"
+      accessibilityLabel={`Ver técnica de ${exerciseName} en YouTube`}
+    >
+      <CirclePlay size={18} color={colors.onPrimary} />
+      <Text style={styles.watchTechniqueLabel}>Ver técnica en YouTube (Shorts)</Text>
+    </Pressable>
+  );
+}
+
 function ExerciseMediaPlaceholder({ exercise }: { exercise: ExerciseCatalogItem }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -228,6 +250,7 @@ function ExerciseMediaPlaceholder({ exercise }: { exercise: ExerciseCatalogItem 
           <Text style={styles.mediaSubtitle}>Demostracion de prueba: {media.sourceName}</Text>
           <Text style={styles.mediaAttribution}>{media.attribution}</Text>
           <Text style={styles.mediaLicense}>{media.licenseNote}</Text>
+          <WatchTechniqueButton exerciseName={exercise.name} />
         </View>
       </View>
     );
@@ -266,6 +289,7 @@ function ExerciseMediaPlaceholder({ exercise }: { exercise: ExerciseCatalogItem 
       </View>
       <View style={styles.mediaFooter}>
         <Text style={styles.mediaExerciseName}>{exercise.name}</Text>
+        <WatchTechniqueButton exerciseName={exercise.name} />
       </View>
     </View>
   );
@@ -432,6 +456,17 @@ function makeStyles(colors: ColorPalette) {
     mediaExerciseName: { color: colors.text, fontWeight: "900", fontSize: 15 },
     mediaAttribution: { color: colors.muted, fontSize: 11.5, lineHeight: 16 },
     mediaLicense: { color: colors.warning, fontSize: 11, fontWeight: "800", lineHeight: 15 },
+    watchTechniqueButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      marginTop: 10,
+      paddingVertical: 11,
+      borderRadius: radius.sm,
+      backgroundColor: colors.primary,
+    },
+    watchTechniqueLabel: { color: colors.onPrimary, fontWeight: "800", fontSize: 13.5 },
     sectionTitle: { color: colors.text, fontSize: 17, fontWeight: "900" },
     seriesTable: { gap: 8 },
     seriesRow: {
