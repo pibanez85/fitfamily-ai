@@ -25,9 +25,9 @@ export const env = {
 export const hasRealBackend =
   looksLikeRealUrl(rawSupabaseUrl) && !isPlaceholder(rawSupabaseAnonKey);
 
-// isDemoMode = corremos con datos simulados en memoria, sin Supabase ni API.
+// isDemoMode = datos simulados guardados en el dispositivo, sin Supabase ni API.
 // Permite abrir la app en Expo Go o web sin configurar nada.
-export const isDemoMode = !hasRealBackend;
+export const isDemoMode = process.env.EXPO_PUBLIC_DEMO_MODE === "true" || !hasRealBackend;
 
 export function hasMobileEnv() {
   return hasRealBackend;

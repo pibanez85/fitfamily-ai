@@ -69,20 +69,20 @@ export const darkColors: ColorPalette = {
 };
 
 export const lightColors: ColorPalette = {
-  background: "#f3f6fb",
+  background: "#F6F7F2",
   backgroundElevated: "#ffffff",
-  surface: "rgba(255, 255, 255, 0.9)",
-  surfaceMuted: "rgba(226, 233, 243, 0.7)",
-  surfaceStrong: "#e2e8f0",
-  text: "#0c1526",
-  muted: "#4d5e78",
-  subtle: "#94a3b8",
-  border: "rgba(15, 33, 63, 0.1)",
-  primary: "#0d9484",
-  primaryDark: "#0c7a6d",
-  primarySoft: "rgba(13, 148, 132, 0.1)",
-  accent: "#e11d48",
-  accentSoft: "rgba(225, 29, 72, 0.1)",
+  surface: "#FFFFFF",
+  surfaceMuted: "#EEF1E8",
+  surfaceStrong: "#E2E8D9",
+  text: "#182820",
+  muted: "#69756B",
+  subtle: "#7D897D",
+  border: "#E4E8DD",
+  primary: "#426B50",
+  primaryDark: "#243F30",
+  primarySoft: "#E9F1DF",
+  accent: "#BD714C",
+  accentSoft: "#F9EEE5",
   energy: "#b45309",
   energySoft: "rgba(180, 83, 9, 0.12)",
   warning: "#b45309",
@@ -91,16 +91,16 @@ export const lightColors: ColorPalette = {
   shadow: "#0f172a",
   overlay: "rgba(15, 23, 42, 0.45)",
   onPrimary: "#ffffff",
-  gradientFrom: "#0d9484",
-  gradientTo: "#0891b2",
-  backgroundGlow: "rgba(13, 148, 132, 0.06)",
+  gradientFrom: "#426B50",
+  gradientTo: "#426B50",
+  backgroundGlow: "transparent",
   glass: "rgba(255, 255, 255, 0.78)",
   glassBorder: "rgba(15, 33, 63, 0.08)",
 };
 
 // Compatibilidad: los modulos que aun no migraron a useTheme siguen importando
 // `colors`. Apunta al tema oscuro (tema por defecto de la app).
-export const colors: ColorPalette = darkColors;
+export const colors: ColorPalette = lightColors;
 
 export const radius = {
   sm: 12,

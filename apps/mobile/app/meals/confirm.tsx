@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Save } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
@@ -9,6 +9,7 @@ import { AppButton } from "@/components/AppButton";
 import { Card } from "@/components/Card";
 import { ChoiceGroup, type ChoiceOption } from "@/components/ChoiceGroup";
 import { FormField } from "@/components/FormField";
+import { DatePickerField } from "@/components/DatePickerField";
 import { MetricPill } from "@/components/MetricPill";
 import { Screen } from "@/components/Screen";
 import { EmptyState } from "@/components/StateViews";
@@ -18,15 +19,29 @@ import { api } from "@/services/api";
 import { useAppStore } from "@/store/appStore";
 import type { ColorPalette } from "@/theme/colors";
 import { useTheme } from "@/theme/theme";
+import { isLocalDate, localDateKey, localNoonIso } from "@/utils/localDate";
+
+const macroInput = z
+  .string()
+  .trim()
+  .min(1, "Campo requerido")
+  .refine((value) => {
+    const number = Number(value.replace(",", "."));
+    return Number.isFinite(number) && number >= 0;
+  }, "Ingresa un número positivo o cero");
 
 const ConfirmMealSchema = z.object({
-  name: z.string().min(1, "Nombre requerido"),
+  name: z.string().trim().min(1, "Nombre requerido").max(160),
   mealType: z.enum(["breakfast", "lunch", "dinner", "snack", "other"]),
-  calories: z.string().min(1),
-  proteinG: z.string().min(1),
-  carbsG: z.string().min(1),
-  fatG: z.string().min(1),
-  fiberG: z.string().min(1),
+  eatenDate: z
+    .string()
+    .refine(isLocalDate, "Selecciona una fecha válida")
+    .refine((date) => date <= localDateKey(), "Elige hoy o una fecha anterior"),
+  calories: macroInput,
+  proteinG: macroInput,
+  carbsG: macroInput,
+  fatG: macroInput,
+  fiberG: macroInput,
   notes: z.string().optional(),
 });
 
@@ -36,15 +51,19 @@ export default function ConfirmMealScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const profileId = useActiveProfileId();
+  const params = useLocalSearchParams<{ date?: string }>();
+  const [initialDate] = useState(() => (isLocalDate(params.date) ? params.date : localDateKey()));
   const analysis = useAppStore((state) => state.pendingFoodAnalysis);
   const setPendingFoodAnalysis = useAppStore((state) => state.setPendingFoodAnalysis);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const saveLock = useRef(false);
   const { control, handleSubmit, watch } = useForm<ConfirmMealForm>({
     resolver: zodResolver(ConfirmMealSchema),
     values: {
       name: analysis?.estimatedMealName ?? "",
       mealType: "other",
+      eatenDate: initialDate,
       calories: String(analysis?.totals.calories ?? ""),
       proteinG: String(analysis?.totals.proteinG ?? ""),
       carbsG: String(analysis?.totals.carbsG ?? ""),
@@ -63,13 +82,14 @@ export default function ConfirmMealScreen() {
   }
 
   async function save(values: ConfirmMealForm) {
-    if (!profileId || !analysis) return;
+    if (!profileId || !analysis || saveLock.current) return;
+    saveLock.current = true;
     setLoading(true);
     setError(null);
     try {
       await api.meals.create(profileId, {
         mealType: values.mealType,
-        eatenAt: new Date().toISOString(),
+        eatenAt: localNoonIso(values.eatenDate),
         name: values.name,
         calories: toNumber(values.calories),
         proteinG: toNumber(values.proteinG),
@@ -88,12 +108,15 @@ export default function ConfirmMealScreen() {
           confidence: item.confidence,
         })),
       });
-      setPendingFoodAnalysis(null);
-      router.replace("/meals");
+      if (useAppStore.getState().activeProfileId === profileId) {
+        setPendingFoodAnalysis(null);
+        router.replace({ pathname: "/meals", params: { date: values.eatenDate } });
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "No se pudo guardar.");
     } finally {
       setLoading(false);
+      saveLock.current = false;
     }
   }
 
@@ -114,13 +137,29 @@ export default function ConfirmMealScreen() {
 
       <Card>
         <FormField control={control} name="name" label="Nombre" />
-        <ChoiceGroup control={control} name="mealType" label="Tipo de comida" options={mealTypeOptions} />
+        <ChoiceGroup
+          control={control}
+          name="mealType"
+          label="Tipo de comida"
+          options={mealTypeOptions}
+        />
+        <DatePickerField
+          control={control}
+          name="eatenDate"
+          label="Fecha de la comida"
+          minYear={2020}
+        />
         <View style={styles.grid}>
           <View style={styles.gridItem}>
             <FormField control={control} name="calories" label="Calorías" keyboardType="numeric" />
           </View>
           <View style={styles.gridItem}>
-            <FormField control={control} name="proteinG" label="Proteína g" keyboardType="numeric" />
+            <FormField
+              control={control}
+              name="proteinG"
+              label="Proteína g"
+              keyboardType="numeric"
+            />
           </View>
           <View style={styles.gridItem}>
             <FormField control={control} name="carbsG" label="Carbos g" keyboardType="numeric" />
@@ -145,7 +184,12 @@ export default function ConfirmMealScreen() {
         ))}
         <BodyText style={styles.disclaimer}>{analysis.disclaimer}</BodyText>
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <AppButton label="Guardar comida" icon={Save} loading={loading} onPress={handleSubmit(save)} />
+        <AppButton
+          label="Guardar comida"
+          icon={Save}
+          loading={loading}
+          onPress={handleSubmit(save)}
+        />
       </Card>
     </Screen>
   );

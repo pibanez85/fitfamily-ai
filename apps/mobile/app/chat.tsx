@@ -1,5 +1,5 @@
 import { Send, Sparkles } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Screen } from "@/components/Screen";
 import { BodyText, Subtitle, Title } from "@/components/Typography";
@@ -8,6 +8,7 @@ import { api } from "@/services/api";
 import type { ColorPalette } from "@/theme/colors";
 import { radius } from "@/theme/colors";
 import { useTheme } from "@/theme/theme";
+import { isDemoMode } from "@/config/env";
 
 type LocalMessage = {
   role: "user" | "assistant";
@@ -23,25 +24,40 @@ const suggestions = [
 ];
 
 export default function ChatScreen() {
+  const profileId = useActiveProfileId();
+  return <ProfileChat key={profileId} profileId={profileId} />;
+}
+
+function ProfileChat({ profileId }: { profileId: string | null }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const profileId = useActiveProfileId();
   const [threadId, setThreadId] = useState<string | undefined>();
   const [messages, setMessages] = useState<LocalMessage[]>([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
+  const alive = useRef(true);
+  const sending = useRef(false);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
   async function send(prompt?: string) {
     const userMessage = (prompt ?? text).trim();
-    if (!profileId || !userMessage) return;
+    if (!profileId || !userMessage || sending.current) return;
+    sending.current = true;
     setText("");
     setMessages((current) => [...current, { role: "user", content: userMessage }]);
     setLoading(true);
     try {
       const result = await api.ai.chat(profileId, userMessage, threadId);
+      if (!alive.current) return;
       setThreadId(result.threadId);
       setMessages((current) => [...current, result.message]);
     } catch (caught) {
+      if (!alive.current) return;
       setMessages((current) => [
         ...current,
         {
@@ -50,14 +66,19 @@ export default function ChatScreen() {
         },
       ]);
     } finally {
-      setLoading(false);
+      sending.current = false;
+      if (alive.current) setLoading(false);
     }
   }
 
   return (
     <Screen>
-      <Title>Chat con IA</Title>
-      <Subtitle>Usa perfil, objetivos, comidas, entrenos y métricas de los últimos 30 días.</Subtitle>
+      <Title>Un coach que te conoce.</Title>
+      <Subtitle>
+        {isDemoMode
+          ? "Estás probando la conversación. Aquí no se generan respuestas de IA real."
+          : "Usa perfil, objetivos, comidas, entrenos y métricas de los últimos 30 días."}
+      </Subtitle>
       <View style={styles.messages}>
         {messages.length === 0 ? (
           <View style={styles.suggestionsBox}>
@@ -67,6 +88,7 @@ export default function ChatScreen() {
                 <Pressable
                   key={suggestion}
                   accessibilityRole="button"
+                  disabled={loading}
                   onPress={() => void send(suggestion)}
                   style={styles.suggestionChip}
                 >
@@ -80,7 +102,10 @@ export default function ChatScreen() {
         {messages.map((message, index) => (
           <View
             key={`${message.role}-${index}`}
-            style={[styles.bubble, message.role === "user" ? styles.userBubble : styles.assistantBubble]}
+            style={[
+              styles.bubble,
+              message.role === "user" ? styles.userBubble : styles.assistantBubble,
+            ]}
           >
             <Text style={message.role === "user" ? styles.userBubbleText : styles.bubbleText}>
               {message.content}
@@ -101,6 +126,7 @@ export default function ChatScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Enviar pregunta"
+          disabled={loading || !text.trim()}
           style={styles.send}
           onPress={() => void send()}
         >

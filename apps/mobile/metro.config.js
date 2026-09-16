@@ -1,16 +1,8 @@
-const path = require("path");
+const path = require("node:path");
+const { installWindowsFileTypesWorkaround } = require("./scripts/windows-file-types.cjs");
+installWindowsFileTypesWorkaround(path.resolve(__dirname, "../.."));
 const { getDefaultConfig } = require("expo/metro-config");
 
-const projectRoot = __dirname;
-const workspaceRoot = path.resolve(projectRoot, "../..");
-const sharedRoot = path.resolve(workspaceRoot, "packages/shared");
-const config = getDefaultConfig(projectRoot);
-
-config.watchFolders = [sharedRoot];
-config.resolver.nodeModulesPaths = [
-  path.resolve(projectRoot, "node_modules"),
-  path.resolve(workspaceRoot, "node_modules"),
-];
-config.resolver.unstable_enableSymlinks = true;
-
-module.exports = config;
+// SDK 56 detects workspace packages and their node_modules automatically.
+// Keep Expo's watch folders so native and web resolve the same files.
+module.exports = getDefaultConfig(__dirname);

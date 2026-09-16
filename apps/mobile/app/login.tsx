@@ -85,7 +85,13 @@ export default function LoginScreen() {
     setStatus(null);
     setDemoLoading(true);
     try {
-      if (!isDemoMode) {
+      if (isDemoMode) {
+        const { data } = await supabase.auth.signInWithPassword({
+          email: "demo@fitfamily.ai",
+          password: "local-demo",
+        });
+        setSession(data.session);
+      } else {
         setStatus("Entrando con demo real...");
         await withTimeout(
           supabase.auth.signInWithPassword({ email: "demo@fitfamily.ai", password: "demo1234" }),
@@ -112,10 +118,14 @@ export default function LoginScreen() {
             <Text style={styles.demoTitle}>Modo demo activo</Text>
           </View>
           <BodyText style={styles.demoText}>
-            No hay credenciales configuradas, así que la app corre con datos de ejemplo. Entra con un toque y
-            explora todo sin configurar nada.
+            Espacio de prueba con datos de ejemplo. Tus registros familiares reales están separados.
           </BodyText>
-          <AppButton label="Entrar en modo demo" icon={Sparkles} loading={demoLoading} onPress={enterDemo} />
+          <AppButton
+            label="Entrar en modo demo"
+            icon={Sparkles}
+            loading={demoLoading}
+            onPress={enterDemo}
+          />
         </Card>
       ) : null}
 
@@ -134,7 +144,12 @@ export default function LoginScreen() {
         </Link>
         {status ? <Text style={styles.status}>{status}</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <AppButton label="Iniciar sesión" icon={LogIn} loading={loading} onPress={handleSubmit(onSubmit)} />
+        <AppButton
+          label="Iniciar sesión"
+          icon={LogIn}
+          loading={loading}
+          onPress={handleSubmit(onSubmit)}
+        />
       </Card>
 
       <Link href="/register" style={styles.link}>

@@ -131,7 +131,7 @@ export function buildExerciseProgress(logs: WorkoutLogDetail[]): ExerciseProgres
 
       const trend = [...trendByLog.values()].slice(-6);
       const latestWeight = trend.at(-1)?.weight ?? 0;
-      const previousWeight = trend.length > 1 ? trend.at(-2)?.weight ?? 0 : 0;
+      const previousWeight = trend.length > 1 ? (trend.at(-2)?.weight ?? 0) : 0;
 
       return {
         exerciseId,
@@ -148,7 +148,7 @@ export function buildExerciseProgress(logs: WorkoutLogDetail[]): ExerciseProgres
           : null,
         latestWeight,
         previousWeight,
-        weightDelta: latestWeight - previousWeight,
+        weightDelta: trend.length > 1 ? latestWeight - previousWeight : 0,
         trend,
       };
     })

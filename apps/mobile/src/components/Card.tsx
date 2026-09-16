@@ -19,16 +19,16 @@ function makeStyles(colors: ColorPalette) {
   return StyleSheet.create({
     card: {
       gap: 10,
-      padding: 18,
+      padding: 22,
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: radius.md,
       backgroundColor: colors.surface,
       shadowColor: colors.shadow,
-      shadowOpacity: 0.22,
-      shadowRadius: 24,
-      shadowOffset: { width: 0, height: 10 },
-      elevation: 3,
+      shadowOpacity: 0.025,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 1,
     },
   });
 }

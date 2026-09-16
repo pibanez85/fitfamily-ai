@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Check } from "lucide-react-native";
 import { useMemo } from "react";
 import { StyleSheet, Text } from "react-native";
@@ -15,11 +15,15 @@ export default function FoodAnalysisScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const analysis = useAppStore((state) => state.pendingFoodAnalysis);
+  const params = useLocalSearchParams<{ date?: string }>();
 
   if (!analysis) {
     return (
       <Screen>
-        <EmptyState title="Sin análisis activo" body="Sube una foto de comida para ver resultados." />
+        <EmptyState
+          title="Sin análisis activo"
+          body="Sube una foto de comida para ver resultados."
+        />
       </Screen>
     );
   }
@@ -31,19 +35,30 @@ export default function FoodAnalysisScreen() {
       <Card>
         <Text style={styles.total}>{analysis.totals.calories} kcal</Text>
         <BodyText>
-          P {analysis.totals.proteinG}g · C {analysis.totals.carbsG}g · G {analysis.totals.fatG}g · Fibra {analysis.totals.fiberG}g
+          P {analysis.totals.proteinG}g · C {analysis.totals.carbsG}g · G {analysis.totals.fatG}g ·
+          Fibra {analysis.totals.fiberG}g
         </BodyText>
       </Card>
       {analysis.items.map((item) => (
         <Card key={`${item.name}-${item.estimatedPortion}`}>
           <Text style={styles.item}>{item.name}</Text>
           <BodyText>
-            {item.estimatedPortion} · {item.calories} kcal · confianza {Math.round(item.confidence * 100)}%
+            {item.estimatedPortion} · {item.calories} kcal · confianza{" "}
+            {Math.round(item.confidence * 100)}%
           </BodyText>
         </Card>
       ))}
       <BodyText style={styles.disclaimer}>{analysis.disclaimer}</BodyText>
-      <AppButton label="Corregir y guardar" icon={Check} onPress={() => router.push("/meals/confirm")} />
+      <AppButton
+        label="Corregir y guardar"
+        icon={Check}
+        onPress={() =>
+          router.push({
+            pathname: "/meals/confirm",
+            params: { ...(params.date ? { date: params.date } : {}) },
+          })
+        }
+      />
     </Screen>
   );
 }

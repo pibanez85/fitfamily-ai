@@ -1,664 +1,465 @@
-import { router, useFocusEffect, type Href } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import {
-  Beef,
-  Bot,
-  Camera,
-  ChevronRight,
+  ArrowUpRight,
   Dumbbell,
-  Flame,
-  Ruler,
-  Scale,
-  Settings,
+  Plus,
   Utensils,
-  Watch,
+  CalendarDays,
+  Scale,
+  ChevronRight,
+  Check,
+  Camera,
 } from "lucide-react-native";
-import { useCallback, useMemo, useState } from "react";
-import { ImageBackground, Pressable, StyleSheet, Text, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import type { DashboardResponse } from "@fitfamily-ai/shared";
-import { Card } from "@/components/Card";
+import { useCallback, useState } from "react";
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import Svg, { Circle } from "react-native-svg";
+import type { BodyMetric, Meal, Workout, WorkoutLog } from "@fitfamily-ai/shared";
 import { Screen } from "@/components/Screen";
-import { EmptyState, LoadingState } from "@/components/StateViews";
-import { BodyText, Subtitle, Title } from "@/components/Typography";
+import { Card } from "@/components/Card";
+import { AppButton } from "@/components/AppButton";
+import { Title, BodyText } from "@/components/Typography";
+import { LoadingState } from "@/components/StateViews";
 import { useActiveProfileId } from "@/lib/activeProfile";
 import { api } from "@/services/api";
 import { useAppStore } from "@/store/appStore";
-import type { ColorPalette } from "@/theme/colors";
 import { useTheme } from "@/theme/theme";
-import { gymImages } from "@/theme/images";
+import { useLocalDay } from "@/hooks/useLocalDay";
+import { datesEndingAt, localDateKey, parseLocalDate } from "@/utils/localDate";
+import { computeNutritionGoals } from "@/utils/nutritionGoals";
 
-type DashboardIcon = typeof Dumbbell;
-type ActionTone = "primary" | "energy" | "accent" | "success" | "neutral";
-type DashboardAction = {
-  label: string;
-  description: string;
-  href: Href;
-  icon: DashboardIcon;
-  tone: ActionTone;
-};
-
-const actions = [
-  {
-    label: "Rutina de hoy",
-    description: "Entrena o adapta",
-    href: "/today",
-    icon: Dumbbell,
-    tone: "primary",
-  },
-  {
-    label: "Registrar comida",
-    description: "Macros y porciones",
-    href: "/meals/new",
-    icon: Utensils,
-    tone: "energy",
-  },
-  {
-    label: "Foto comida",
-    description: "Estimar con IA",
-    href: "/meals/photo",
-    icon: Camera,
-    tone: "accent",
-  },
-  {
-    label: "Peso y medidas",
-    description: "Actualizar progreso",
-    href: "/body-metrics",
-    icon: Ruler,
-    tone: "success",
-  },
-  {
-    label: "Reloj",
-    description: "Conectar salud",
-    href: "/wearables",
-    icon: Watch,
-    tone: "primary",
-  },
-  {
-    label: "Ajustes",
-    description: "Tema y cuenta",
-    href: "/settings",
-    icon: Settings,
-    tone: "neutral",
-  },
-] satisfies DashboardAction[];
-
+type Diary = { meals: Meal[]; logs: WorkoutLog[]; workouts: Workout[]; metrics: BodyMetric[] };
 export default function DashboardScreen() {
+  const profileId = useActiveProfileId();
+  return <ProfileDashboard key={profileId ?? "no-profile"} />;
+}
+
+function ProfileDashboard() {
   const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { width } = useWindowDimensions();
+  const wide = width >= 1100;
   const profileId = useActiveProfileId();
   const profile = useAppStore((state) => state.activeProfile());
-  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const nextAction = useMemo(() => buildNextAction(dashboard), [dashboard]);
-
+  const activeId = useAppStore((state) => state.getActiveWorkoutId(profileId));
+  const today = useLocalDay();
+  const [data, setData] = useState<Diary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
   useFocusEffect(
     useCallback(() => {
       if (!profileId) return;
       let alive = true;
-      setLoading(true);
-      api
-        .dashboard(profileId)
-        .then((data) => {
-          if (alive) setDashboard(data);
+      setData(null);
+      setError(null);
+      Promise.all([
+        api.meals.list(profileId),
+        api.workouts.logs(profileId),
+        api.workouts.list(profileId),
+        api.bodyMetrics.list(profileId),
+      ])
+        .then(([meals, logs, workouts, metrics]) => {
+          if (alive) setData({ meals, logs, workouts, metrics });
         })
-        .finally(() => {
-          if (alive) setLoading(false);
+        .catch((caught) => {
+          if (alive)
+            setError(caught instanceof Error ? caught.message : "No pudimos cargar tu día.");
         });
       return () => {
         alive = false;
       };
-    }, [profileId]),
+    }, [profileId, today, retry]),
   );
-
+  const days = datesEndingAt(today);
+  const meals = data?.meals.filter((meal) => localDateKey(meal.eatenAt) === today) ?? [];
+  const total = meals.reduce(
+    (sum, meal) => ({
+      kcal: sum.kcal + (meal.calories ?? 0),
+      protein: sum.protein + (meal.proteinG ?? 0),
+      carbs: sum.carbs + (meal.carbsG ?? 0),
+      fat: sum.fat + (meal.fatG ?? 0),
+    }),
+    { kcal: 0, protein: 0, carbs: 0, fat: 0 },
+  );
+  const weight = data?.metrics
+    .slice()
+    .sort((a, b) => b.measuredAt.localeCompare(a.measuredAt))[0]?.weightKg;
+  const goals = computeNutritionGoals(profile, weight);
+  const workout = data?.workouts.find((item) => item.id === activeId);
+  const weekLogs = data?.logs.filter((log) => days.includes(localDateKey(log.startedAt))) ?? [];
+  const todayLogs = weekLogs.filter((log) => localDateKey(log.startedAt) === today);
+  const fraction = Math.min(1, total.kcal / goals.calories);
   return (
     <Screen>
-      <ImageBackground
-        source={{ uri: gymImages.weights }}
-        imageStyle={styles.heroImage}
-        style={styles.hero}
-      >
-        <LinearGradient
-          colors={["rgba(4, 8, 16, 0.1)", "rgba(4, 8, 16, 0.55)", "rgba(4, 8, 16, 0.92)"]}
-          style={styles.heroOverlay}
-        />
-        <View style={styles.heroContent}>
-          <View style={styles.heroPillRow}>
-            <Text style={styles.heroPill}>Entreno familiar</Text>
-            <Text style={styles.heroPillAccent}>Coach IA</Text>
-          </View>
-          <Text style={styles.heroTitle} numberOfLines={2}>
-            {profile ? `Hola, ${profile.displayName}` : "FitFamily AI"}
+      <View style={s.header}>
+        <View style={{ gap: 7 }}>
+          <Text style={[s.eyebrow, { color: colors.primary }]}>TU DIARIO PERSONAL</Text>
+          <Title>
+            Hola, {profile?.displayName ?? "familia"}
+            <Text style={{ color: colors.primary }}>.</Text>
+          </Title>
+          <BodyText style={{ color: colors.muted }}>
+            Cada pequeño paso cuenta. Este es el tuyo de hoy.
+          </BodyText>
+        </View>
+        <View style={[s.date, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+          <CalendarDays size={16} color={colors.primary} />
+          <Text style={{ color: colors.text, fontSize: 12 }}>
+            {parseLocalDate(today).toLocaleDateString("es-CL", { day: "numeric", month: "long" })}
           </Text>
-          <Text style={styles.heroSubtitle}>Una vista simple para decidir tu próximo paso.</Text>
-          {dashboard ? (
-            <View style={styles.heroStats}>
-              <HeroStat label="Entrenos" value={String(dashboard.workoutsLast7Days)} />
-              <HeroStat label="Comidas" value={String(dashboard.mealsLast7Days)} />
-              <HeroStat
-                label="Prote"
-                value={dashboard.averageProteinG ? `${dashboard.averageProteinG}g` : "s/d"}
-              />
-            </View>
-          ) : null}
         </View>
-      </ImageBackground>
-
-      {loading ? <LoadingState /> : null}
-      {!loading && dashboard && nextAction ? (
-        <DailyPlanCard dashboard={dashboard} action={nextAction} />
-      ) : null}
-      {dashboard ? (
-        <View style={styles.statsGrid}>
-          <Stat
-            icon={Dumbbell}
-            tint={colors.primary}
-            label="Entrenos 7d"
-            value={String(dashboard.workoutsLast7Days)}
-          />
-          <Stat
-            icon={Utensils}
-            tint={colors.energy}
-            label="Comidas 7d"
-            value={String(dashboard.mealsLast7Days)}
-          />
-          <Stat
-            icon={Flame}
-            tint={colors.accent}
-            label="Kcal/día"
-            value={dashboard.averageCalories?.toString() ?? "s/d"}
-          />
-          <Stat
-            icon={Beef}
-            tint={colors.success}
-            label="Proteína/día"
-            value={dashboard.averageProteinG ? `${dashboard.averageProteinG}g` : "s/d"}
-          />
-        </View>
-      ) : null}
-      {dashboard?.latestWeightKg ? (
-        <Card style={styles.weightCard}>
-          <View style={styles.weightIcon}>
-            <Scale size={19} color={colors.primary} />
-          </View>
-          <View style={styles.weightText}>
-            <Text style={styles.cardTitle}>Último peso</Text>
-            <BodyText style={styles.weightValue}>{dashboard.latestWeightKg} kg</BodyText>
-          </View>
-        </Card>
-      ) : null}
-      {dashboard?.alerts.length ? (
-        <Card>
-          <Text style={styles.cardTitle}>Alertas simples</Text>
-          {dashboard.alerts.map((alert) => (
-            <BodyText key={alert}>{alert}</BodyText>
-          ))}
-        </Card>
-      ) : null}
-      {!loading && !dashboard ? (
-        <EmptyState
-          title="Sin datos"
-          body="Registra entrenamientos o comidas para alimentar el dashboard."
-        />
-      ) : null}
-      <View>
-        <Title style={styles.sectionTitle}>Accesos rápidos</Title>
-        <Subtitle>Registra lo importante con pocos toques.</Subtitle>
       </View>
-      <View style={styles.actionGrid}>
-        {actions.map((action) => {
-          return <QuickAction key={action.href.toString()} action={action} />;
+      <View style={[s.week, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        {days.map((day) => {
+          const isToday = day === today;
+          const trained = data?.logs.some((log) => localDateKey(log.startedAt) === day);
+          return (
+            <Pressable
+              key={day}
+              accessibilityRole="button"
+              accessibilityLabel={"Ver registros del " + day}
+              onPress={() => router.push({ pathname: "/meals", params: { date: day } })}
+              style={[s.weekDay, { backgroundColor: isToday ? colors.primary : "transparent" }]}
+            >
+              <Text style={[s.weekLabel, { color: isToday ? "#E2EDDC" : colors.muted }]}>
+                {parseLocalDate(day)
+                  .toLocaleDateString("es-CL", { weekday: "short" })
+                  .replace(".", "")
+                  .toUpperCase()}
+              </Text>
+              <Text style={[s.dayNumber, { color: isToday ? "#FFFFFF" : colors.text }]}>
+                {parseLocalDate(day).getDate()}
+              </Text>
+              {trained ? (
+                <Check size={12} color={isToday ? "#D4EF8A" : colors.primary} />
+              ) : (
+                <View style={[s.dot, { backgroundColor: isToday ? "#D4EF8A" : colors.border }]} />
+              )}
+            </Pressable>
+          );
         })}
       </View>
+      {error ? (
+        <Card>
+          <BodyText>{error}</BodyText>
+          <AppButton label="Volver a intentar" onPress={() => setRetry((value) => value + 1)} />
+        </Card>
+      ) : null}
+      {!data && !error ? <LoadingState label="Preparando tu día..." /> : null}
+      {data ? (
+        <>
+          <View style={[s.columns, wide ? s.horizontal : null]}>
+            <View style={[s.training, { flex: wide ? 1.15 : undefined }]}>
+              <View style={s.row}>
+                <View style={s.badge}>
+                  <Dumbbell size={15} color="#D4EF8A" />
+                  <Text style={s.badgeText}>TU MOVIMIENTO DE HOY</Text>
+                </View>
+                <ArrowUpRight size={23} color="#B9CDB9" />
+              </View>
+              <Text style={s.trainingTitle}>
+                {todayLogs.length
+                  ? "Buen trabajo.\nYa sumaste hoy."
+                  : workout
+                    ? "Tu próxima serie\nempieza aquí."
+                    : "Hagamos espacio\npara ti."}
+              </Text>
+              <Text style={s.trainingSubtitle}>
+                {workout?.name ?? "Incorpora tu rutina y ten cada sesión a mano."}
+              </Text>
+              <View style={s.trainingFooter}>
+                <Text style={s.trainingMeta}>{weekLogs.length} sesiones en los últimos 7 días</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={workout ? "Ver entrenamiento de hoy" : "Elegir mi rutina"}
+                  onPress={() => router.push(workout ? "/today" : "/workouts")}
+                  style={s.trainingButton}
+                >
+                  <Text style={s.trainingButtonText}>
+                    {workout ? "Ver mi sesión" : "Elegir rutina"}
+                  </Text>
+                  <ArrowUpRight size={17} color="#233A29" />
+                </Pressable>
+              </View>
+              <View pointerEvents="none" style={s.orbitOne} />
+              <View pointerEvents="none" style={s.orbitTwo} />
+            </View>
+            <Card style={{ flex: wide ? 1 : undefined, gap: 18 }}>
+              <View style={s.row}>
+                <Text style={[s.sectionTitle, { color: colors.text }]}>Tu nutrición, hoy</Text>
+                <Utensils size={19} color={colors.primary} />
+              </View>
+              <View style={s.nutritionRow}>
+                <View style={s.ring}>
+                  <Svg width={130} height={130} viewBox="0 0 130 130">
+                    <Circle
+                      cx={65}
+                      cy={65}
+                      r={55}
+                      fill="none"
+                      stroke={colors.surfaceMuted}
+                      strokeWidth={9}
+                    />
+                    <Circle
+                      cx={65}
+                      cy={65}
+                      r={55}
+                      fill="none"
+                      stroke={colors.primary}
+                      strokeWidth={9}
+                      strokeLinecap="round"
+                      strokeDasharray={[345.6 * fraction, 345.6]}
+                      transform="rotate(-90 65 65)"
+                    />
+                  </Svg>
+                  <View style={s.ringText}>
+                    <Text style={[s.total, { color: colors.text }]}>{Math.round(total.kcal)}</Text>
+                    <Text style={[s.small, { color: colors.muted }]}>kcal registradas</Text>
+                  </View>
+                </View>
+                <View style={{ flex: 1, gap: 12 }}>
+                  <Text style={[s.remaining, { color: colors.text }]}>
+                    {Math.max(0, Math.round(goals.calories - total.kcal))}{" "}
+                    <Text style={s.small}>kcal restantes</Text>
+                  </Text>
+                  <Text style={[s.small, { color: colors.muted }]}>
+                    Referencia estimada: {goals.calories} kcal
+                  </Text>
+                  <Text style={[s.small, { color: colors.muted }]}>
+                    {meals.length} comidas registradas hoy
+                  </Text>
+                </View>
+              </View>
+              <View style={s.macros}>
+                {[
+                  {
+                    name: "Proteína",
+                    value: total.protein,
+                    goal: goals.proteinG,
+                    color: "#426B50",
+                  },
+                  { name: "Carbos", value: total.carbs, goal: goals.carbsG, color: "#C7A260" },
+                  { name: "Grasas", value: total.fat, goal: goals.fatG, color: "#BB866A" },
+                ].map((macro) => (
+                  <View key={macro.name} style={{ flex: 1, gap: 7 }}>
+                    <Text style={[s.small, { color: colors.muted }]}>{macro.name}</Text>
+                    <Text style={{ color: colors.text, fontWeight: "700" }}>
+                      {Math.round(macro.value)}{" "}
+                      <Text style={{ color: colors.muted, fontWeight: "400", fontSize: 10 }}>
+                        / {macro.goal} g
+                      </Text>
+                    </Text>
+                    <View style={[s.track, { backgroundColor: colors.surfaceMuted }]}>
+                      <View
+                        style={{
+                          height: 4,
+                          borderRadius: 3,
+                          width: (Math.min(100, (macro.value / macro.goal) * 100) +
+                            "%") as `${number}%`,
+                          backgroundColor: macro.color,
+                        }}
+                      />
+                    </View>
+                  </View>
+                ))}
+              </View>
+              <AppButton
+                label="Registrar comida"
+                icon={Plus}
+                variant="secondary"
+                onPress={() => router.push("/meals/new")}
+              />
+            </Card>
+          </View>
+          <View style={s.row}>
+            <Text style={[s.sectionTitle, { color: colors.text }]}>Tu semana, en perspectiva</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push("/progress")}
+              style={s.inline}
+            >
+              <Text style={[s.small, { color: colors.primary }]}>Ver progreso</Text>
+              <ChevronRight size={15} color={colors.primary} />
+            </Pressable>
+          </View>
+          <View style={[s.columns, wide ? s.horizontal : null]}>
+            <Card style={{ flex: wide ? 1.55 : undefined }}>
+              <View style={s.row}>
+                <View style={{ gap: 6 }}>
+                  <Text style={[s.eyebrow, { color: colors.muted }]}>CONSTANCIA DIARIA</Text>
+                  <Text style={[s.statNumber, { color: colors.text }]}>
+                    {
+                      days.filter(
+                        (day) =>
+                          data.meals.some((meal) => localDateKey(meal.eatenAt) === day) ||
+                          data.logs.some((log) => localDateKey(log.startedAt) === day),
+                      ).length
+                    }
+                    <Text style={[s.small, { color: colors.muted }]}> / 7 días con registros</Text>
+                  </Text>
+                </View>
+                <View style={s.inline}>
+                  <View style={[s.dot, { backgroundColor: colors.primary }]} />
+                  <Text style={[s.small, { color: colors.muted }]}>Comidas</Text>
+                </View>
+              </View>
+              <View style={s.chart}>
+                {days.map((day) => {
+                  const count = data.meals.filter(
+                    (meal) => localDateKey(meal.eatenAt) === day,
+                  ).length;
+                  return (
+                    <View key={day} style={s.chartColumn}>
+                      <Text style={[s.small, { color: colors.muted }]}>{count}</Text>
+                      <View
+                        style={[
+                          s.bar,
+                          {
+                            height: Math.max(4, Math.min(80, count * 17)),
+                            backgroundColor: day === today ? colors.primary : "#DDE6CC",
+                          },
+                        ]}
+                      />
+                      <Text style={[s.small, { color: colors.muted }]}>
+                        {parseLocalDate(day)
+                          .toLocaleDateString("es-CL", { weekday: "short" })
+                          .slice(0, 2)}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </Card>
+            <Card style={{ flex: wide ? 1 : undefined, justifyContent: "space-between", gap: 17 }}>
+              <View style={s.row}>
+                <Text style={[s.eyebrow, { color: colors.muted }]}>ÚLTIMO PESO REGISTRADO</Text>
+                <Scale size={19} color={colors.primary} />
+              </View>
+              <Text style={[s.statNumber, { color: colors.text }]}>
+                {weight ?? "—"}
+                <Text style={[s.small, { color: colors.muted }]}> kg</Text>
+              </Text>
+              <Text style={[s.small, { color: colors.muted }]}>
+                Observa tu evolución a tu propio ritmo.
+              </Text>
+              <AppButton
+                label="Registrar medida"
+                variant="secondary"
+                icon={Plus}
+                onPress={() => router.push("/body-metrics")}
+              />
+            </Card>
+          </View>
+          <View style={s.quickRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push("/meals/photo")}
+              style={[s.quick, { backgroundColor: colors.accentSoft }]}
+            >
+              <Camera size={20} color={colors.accent} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.text, fontWeight: "700", fontSize: 13 }}>
+                  ¿Qué hay en tu plato?
+                </Text>
+                <Text style={[s.small, { color: colors.muted }]}>
+                  Registra una foto y revisa la estimación.
+                </Text>
+              </View>
+              <ArrowUpRight size={19} color={colors.accent} />
+            </Pressable>
+          </View>
+        </>
+      ) : null}
     </Screen>
   );
 }
-
-function DailyPlanCard({
-  dashboard,
-  action,
-}: {
-  dashboard: DashboardResponse;
-  action: DashboardAction;
-}) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const Icon = action.icon;
-  const tint = toneColor(action.tone, colors);
-  return (
-    <Card style={styles.planCard}>
-      <View style={styles.planHeader}>
-        <View style={[styles.planIcon, { backgroundColor: `${tint}1f` }]}>
-          <Icon size={20} color={tint} />
-        </View>
-        <View style={styles.planText}>
-          <Text style={styles.planEyebrow}>Plan de hoy</Text>
-          <Text style={styles.planTitle}>{action.label}</Text>
-          <Text style={styles.planDescription}>{action.description}</Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Abrir ${action.label}`}
-          style={styles.planCta}
-          onPress={() => router.push(action.href)}
-        >
-          <ChevronRight size={20} color={colors.onPrimary} />
-        </Pressable>
-      </View>
-      <View style={styles.signalRow}>
-        <Signal
-          label="Entrenos 7d"
-          value={String(dashboard.workoutsLast7Days)}
-          active={dashboard.workoutsLast7Days > 0}
-        />
-        <Signal
-          label="Comidas 7d"
-          value={String(dashboard.mealsLast7Days)}
-          active={dashboard.mealsLast7Days > 0}
-        />
-        <Signal
-          label="Peso"
-          value={dashboard.latestWeightKg ? `${dashboard.latestWeightKg} kg` : "pend."}
-          active={Boolean(dashboard.latestWeightKg)}
-        />
-      </View>
-    </Card>
-  );
-}
-
-function Stat({
-  icon: Icon,
-  tint,
-  label,
-  value,
-}: {
-  icon: typeof Dumbbell;
-  tint: string;
-  label: string;
-  value: string;
-}) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  return (
-    <Card style={styles.stat}>
-      <View style={[styles.statIcon, { backgroundColor: `${tint}1f` }]}>
-        <Icon size={17} color={tint} />
-      </View>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </Card>
-  );
-}
-
-function QuickAction({ action }: { action: DashboardAction }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const Icon = action.icon;
-  const tint = toneColor(action.tone, colors);
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${action.label}: ${action.description}`}
-      style={({ pressed }) => [styles.action, pressed ? styles.actionPressed : null]}
-      onPress={() => router.push(action.href)}
-    >
-      <View style={[styles.actionIcon, { backgroundColor: `${tint}1f` }]}>
-        <Icon size={20} color={tint} />
-      </View>
-      <View style={styles.actionCopy}>
-        <Text style={styles.actionText} numberOfLines={2}>
-          {action.label}
-        </Text>
-        <Text style={styles.actionDescription} numberOfLines={2}>
-          {action.description}
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
-
-function Signal({ label, value, active }: { label: string; value: string; active: boolean }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  return (
-    <View style={[styles.signal, active ? styles.signalActive : null]}>
-      <Text style={[styles.signalValue, active ? styles.signalValueActive : null]}>{value}</Text>
-      <Text style={styles.signalLabel}>{label}</Text>
-    </View>
-  );
-}
-
-function HeroStat({ label, value }: { label: string; value: string }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  return (
-    <View style={styles.heroStat}>
-      <Text style={styles.heroStatValue}>{value}</Text>
-      <Text style={styles.heroStatLabel}>{label}</Text>
-    </View>
-  );
-}
-
-function buildNextAction(dashboard: DashboardResponse | null): DashboardAction | null {
-  if (!dashboard) return null;
-  if (dashboard.workoutsLast7Days === 0) {
-    return {
-      label: "Empieza tu rutina activa",
-      description: "Abre el entrenamiento de hoy y registra la primera sesión de la semana.",
-      href: "/today",
-      icon: Dumbbell,
-      tone: "primary",
-    };
-  }
-  if (dashboard.mealsLast7Days === 0) {
-    return {
-      label: "Registra tu primera comida",
-      description: "Agrega una comida rápida para que los macros empiecen a tener sentido.",
-      href: "/meals/new",
-      icon: Utensils,
-      tone: "energy",
-    };
-  }
-  if (!dashboard.latestWeightKg) {
-    return {
-      label: "Agrega tu punto de partida",
-      description: "Registra peso y medidas para ver progreso real en las próximas semanas.",
-      href: "/body-metrics",
-      icon: Scale,
-      tone: "success",
-    };
-  }
-  return {
-    label: "Pide una recomendación",
-    description: "Pregunta al Coach IA qué ajustar hoy según tus registros recientes.",
-    href: "/chat",
-    icon: Bot,
-    tone: "accent",
-  };
-}
-
-function toneColor(tone: ActionTone, colors: ColorPalette) {
-  if (tone === "energy") return colors.energy;
-  if (tone === "accent") return colors.accent;
-  if (tone === "success") return colors.success;
-  if (tone === "neutral") return colors.muted;
-  return colors.primary;
-}
-
-// El hero va sobre una foto oscura: sus textos usan colores fijos claros
-// para mantener contraste en ambos temas.
-function makeStyles(colors: ColorPalette) {
-  return StyleSheet.create({
-    hero: {
-      minHeight: 270,
-      overflow: "hidden",
-      borderRadius: 24,
-      backgroundColor: colors.surface,
-      justifyContent: "flex-end",
-    },
-    heroImage: {
-      borderRadius: 24,
-    },
-    heroOverlay: {
-      position: "absolute",
-      top: 0,
-      right: 0,
-      bottom: 0,
-      left: 0,
-    },
-    heroContent: {
-      gap: 13,
-      padding: 18,
-    },
-    heroPillRow: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-    },
-    heroPill: {
-      alignSelf: "flex-start",
-      overflow: "hidden",
-      borderRadius: 999,
-      backgroundColor: "rgba(248, 250, 252, 0.12)",
-      color: "#f8fafc",
-      fontSize: 12,
-      fontWeight: "900",
-      paddingHorizontal: 11,
-      paddingVertical: 7,
-    },
-    heroPillAccent: {
-      alignSelf: "flex-start",
-      overflow: "hidden",
-      borderRadius: 999,
-      backgroundColor: "#facc15",
-      color: "#111827",
-      fontSize: 12,
-      fontWeight: "900",
-      paddingHorizontal: 11,
-      paddingVertical: 7,
-    },
-    heroTitle: {
-      color: "#f8fafc",
-      fontSize: 34,
-      fontWeight: "900",
-      lineHeight: 38,
-    },
-    heroSubtitle: {
-      color: "#dbeafe",
-      fontSize: 15,
-      lineHeight: 21,
-      maxWidth: 270,
-    },
-    heroStats: {
-      flexDirection: "row",
-      gap: 8,
-    },
-    heroStat: {
-      minWidth: 82,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: "rgba(248, 250, 252, 0.14)",
-      backgroundColor: "rgba(15, 23, 42, 0.7)",
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-    },
-    heroStatValue: {
-      color: "#2dd4bf",
-      fontSize: 20,
-      fontWeight: "900",
-    },
-    heroStatLabel: {
-      color: "#9aa8bc",
-      fontSize: 11,
-      fontWeight: "800",
-    },
-    planCard: {
-      gap: 14,
-      borderColor: colors.primarySoft,
-      backgroundColor: colors.backgroundElevated,
-    },
-    planHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-    },
-    planIcon: {
-      width: 48,
-      height: 48,
-      borderRadius: 15,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    planText: {
-      flex: 1,
-      gap: 2,
-    },
-    planEyebrow: {
-      color: colors.primary,
-      fontSize: 11,
-      fontWeight: "900",
-      textTransform: "uppercase",
-    },
-    planTitle: {
-      color: colors.text,
-      fontSize: 18,
-      fontWeight: "900",
-    },
-    planDescription: {
-      color: colors.muted,
-      fontSize: 12.5,
-      lineHeight: 18,
-      fontWeight: "700",
-    },
-    planCta: {
-      width: 42,
-      height: 42,
-      borderRadius: 14,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.primary,
-    },
-    signalRow: {
-      flexDirection: "row",
-      gap: 8,
-    },
-    signal: {
-      flex: 1,
-      minHeight: 58,
-      justifyContent: "center",
-      borderRadius: 13,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surfaceMuted,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
-    },
-    signalActive: {
-      borderColor: colors.primary,
-      backgroundColor: colors.primarySoft,
-    },
-    signalValue: {
-      color: colors.text,
-      fontSize: 14,
-      fontWeight: "900",
-    },
-    signalValueActive: {
-      color: colors.primary,
-    },
-    signalLabel: {
-      color: colors.muted,
-      fontSize: 11,
-      fontWeight: "800",
-    },
-    statsGrid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 10,
-    },
-    stat: {
-      width: "47%",
-      gap: 4,
-    },
-    statIcon: {
-      width: 34,
-      height: 34,
-      borderRadius: 11,
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: 4,
-    },
-    statValue: {
-      color: colors.text,
-      fontSize: 25,
-      fontWeight: "900",
-      letterSpacing: 0,
-    },
-    statLabel: {
-      color: colors.muted,
-      fontSize: 12,
-      fontWeight: "700",
-    },
-    weightCard: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-    },
-    weightIcon: {
-      width: 42,
-      height: 42,
-      borderRadius: 13,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.primarySoft,
-    },
-    weightText: {
-      flex: 1,
-      gap: 1,
-    },
-    weightValue: {
-      fontSize: 21,
-      fontWeight: "900",
-      letterSpacing: 0,
-    },
-    cardTitle: {
-      color: colors.text,
-      fontWeight: "800",
-      fontSize: 16,
-    },
-    sectionTitle: {
-      color: colors.text,
-      fontSize: 20,
-      fontWeight: "800",
-      marginTop: 2,
-      marginBottom: 2,
-    },
-    actionGrid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 12,
-    },
-    action: {
-      flexBasis: "47%",
-      flexGrow: 1,
-      minHeight: 98,
-      alignItems: "flex-start",
-      justifyContent: "space-between",
-      gap: 10,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surface,
-      padding: 12,
-      shadowColor: colors.shadow,
-      shadowOpacity: 0.05,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 3 },
-      elevation: 2,
-    },
-    actionPressed: {
-      opacity: 0.7,
-      borderColor: colors.accent,
-    },
-    actionIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    actionCopy: {
-      gap: 2,
-    },
-    actionText: {
-      color: colors.text,
-      fontWeight: "900",
-      fontSize: 13,
-      lineHeight: 17,
-    },
-    actionDescription: {
-      color: colors.muted,
-      fontWeight: "700",
-      fontSize: 11.5,
-      lineHeight: 15,
-    },
-  });
-}
+const s = StyleSheet.create({
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 15,
+  },
+  eyebrow: { fontSize: 10, fontWeight: "700", letterSpacing: 1.5 },
+  date: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 10,
+  },
+  week: { flexDirection: "row", padding: 8, gap: 5, borderRadius: 18, borderWidth: 1 },
+  weekDay: { flex: 1, paddingVertical: 12, alignItems: "center", gap: 8, borderRadius: 12 },
+  weekLabel: { fontSize: 9, fontWeight: "600", letterSpacing: 1 },
+  dayNumber: { fontSize: 21, fontWeight: "600" },
+  dot: { width: 5, height: 5, borderRadius: 3 },
+  columns: { gap: 18 },
+  horizontal: { flexDirection: "row", alignItems: "stretch" },
+  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  inline: { flexDirection: "row", gap: 7, alignItems: "center" },
+  training: {
+    backgroundColor: "#243F30",
+    borderRadius: 20,
+    padding: 27,
+    gap: 18,
+    overflow: "hidden",
+    minHeight: 300,
+  },
+  badge: { flexDirection: "row", gap: 8, alignItems: "center", zIndex: 1 },
+  badgeText: { color: "#D4EF8A", fontSize: 9, fontWeight: "700", letterSpacing: 1.4 },
+  trainingTitle: {
+    color: "#FFFFFF",
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: "600",
+    letterSpacing: -1.3,
+    zIndex: 1,
+  },
+  trainingSubtitle: { color: "#CBDBC9", fontSize: 13, lineHeight: 20, zIndex: 1 },
+  trainingFooter: { marginTop: "auto", gap: 18, alignItems: "flex-start", zIndex: 1 },
+  trainingMeta: { fontSize: 11, color: "#B5C9B7" },
+  trainingButton: {
+    backgroundColor: "#D4EF8A",
+    borderRadius: 10,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 25,
+  },
+  trainingButtonText: { color: "#233A29", fontSize: 12, fontWeight: "700" },
+  orbitOne: {
+    position: "absolute",
+    right: -155,
+    top: 60,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    borderWidth: 1,
+    borderColor: "#4D6852",
+  },
+  orbitTwo: {
+    position: "absolute",
+    right: -110,
+    top: 105,
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    borderWidth: 1,
+    borderColor: "#4D6852",
+  },
+  sectionTitle: { fontSize: 17, fontWeight: "700", letterSpacing: -0.3 },
+  nutritionRow: { flexDirection: "row", alignItems: "center", gap: 18 },
+  ring: { width: 130, height: 130 },
+  ringText: { position: "absolute", top: 43, left: 0, right: 0, alignItems: "center", gap: 3 },
+  total: { fontSize: 27, fontWeight: "700", letterSpacing: -1 },
+  small: { fontSize: 11, lineHeight: 17 },
+  remaining: { fontSize: 22, fontWeight: "600" },
+  macros: { flexDirection: "row", gap: 18 },
+  track: { height: 4, borderRadius: 3 },
+  statNumber: { fontSize: 32, fontWeight: "600", letterSpacing: -1 },
+  chart: { flexDirection: "row", alignItems: "flex-end", gap: 18, height: 125, paddingTop: 16 },
+  chartColumn: { flex: 1, alignItems: "center", gap: 7 },
+  bar: { width: "100%", maxWidth: 45, borderRadius: 5 },
+  quickRow: { gap: 16 },
+  quick: { flexDirection: "row", alignItems: "center", gap: 15, borderRadius: 14, padding: 18 },
+});

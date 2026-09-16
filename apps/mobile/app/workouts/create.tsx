@@ -112,9 +112,21 @@ const durationOptions: Array<{ value: DurationValue; label: string; helper: stri
 const frequencyOptions = [2, 3, 4, 5, 6] as const;
 
 const experienceOptions: Array<{ value: ExperienceLevel; label: string; helper: string }> = [
-  { value: "new", label: "Estoy partiendo", helper: "Primeras 2 semanas livianas, tecnica y adaptacion." },
-  { value: "returning", label: "Vuelvo al gym", helper: "Volumen moderado para retomar sin apurarse." },
-  { value: "intermediate", label: "Intermedio", helper: "Progresion normal con ejercicios principales." },
+  {
+    value: "new",
+    label: "Estoy partiendo",
+    helper: "Primeras 2 semanas livianas, tecnica y adaptacion.",
+  },
+  {
+    value: "returning",
+    label: "Vuelvo al gym",
+    helper: "Volumen moderado para retomar sin apurarse.",
+  },
+  {
+    value: "intermediate",
+    label: "Intermedio",
+    helper: "Progresion normal con ejercicios principales.",
+  },
   { value: "advanced", label: "Avanzado", helper: "Mas volumen si ya dominas la tecnica." },
 ];
 
@@ -197,6 +209,10 @@ export default function CreateWorkoutScreen() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [aiInstructions, setAiInstructions] = useState("");
+  const [allowedEquipment, setAllowedEquipment] = useState<string[]>([]);
+  const [excludedExerciseIds, setExcludedExerciseIds] = useState<string[]>([]);
+  const [excludeQuery, setExcludeQuery] = useState("");
+  const [sessionMinutes, setSessionMinutes] = useState("");
   const [goal, setGoal] = useState<GoalValue>("fuerza");
   const [duration, setDuration] = useState<DurationValue>("6-semanas");
   const [experienceLevel, setExperienceLevel] = useState<ExperienceLevel>("returning");
@@ -224,8 +240,15 @@ export default function CreateWorkoutScreen() {
       .then((list) => {
         if (alive) setExerciseCatalog(list);
       })
-      .catch(() => {
-        if (alive) setExerciseCatalog([]);
+      .catch((caught) => {
+        if (alive) {
+          setExerciseCatalog([]);
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : "No pudimos cargar los ejercicios. Vuelve a abrir el editor.",
+          );
+        }
       })
       .finally(() => {
         if (alive) setLoadingExercises(false);
@@ -247,7 +270,12 @@ export default function CreateWorkoutScreen() {
         if (!alive) return;
         const detail = workout as unknown as WorkoutEditorDetail;
         const nextGoal = goalValueFromLabel(detail.goal);
-        const sortedDays = buildDraftDaysFromWorkout(detail, exerciseCatalog, nextGoal, experienceLevel);
+        const sortedDays = buildDraftDaysFromWorkout(
+          detail,
+          exerciseCatalog,
+          nextGoal,
+          experienceLevel,
+        );
 
         setName(detail.name);
         setDescription(detail.description ?? "");
@@ -260,7 +288,9 @@ export default function CreateWorkoutScreen() {
       })
       .catch((caught) => {
         if (!alive) return;
-        setError(caught instanceof Error ? caught.message : "No pude cargar la rutina para editar.");
+        setError(
+          caught instanceof Error ? caught.message : "No pude cargar la rutina para editar.",
+        );
         setHydratedWorkoutId(editingWorkoutId);
       })
       .finally(() => {
@@ -273,8 +303,38 @@ export default function CreateWorkoutScreen() {
   }, [editingWorkoutId, exerciseCatalog, experienceLevel, hydratedWorkoutId, loadingExercises]);
 
   const goalLabel = goalOptions.find((option) => option.value === goal)?.label ?? "Objetivo";
-  const durationLabel = durationOptions.find((option) => option.value === duration)?.label ?? "Duracion";
+  const durationLabel =
+    durationOptions.find((option) => option.value === duration)?.label ?? "Duracion";
   const selectedDay = days[selectedDayIndex] ?? days[0];
+  const equipmentOptions = useMemo(
+    () =>
+      [
+        ...new Set(
+          exerciseCatalog.flatMap((exercise) =>
+            (exercise.libraryEquipment ?? exercise.equipment ?? "")
+              .split(/\s+o\s+|\s+y\s+|\+|\//i)
+              .map((value) => value.trim())
+              .filter(Boolean),
+          ),
+        ),
+      ].sort(),
+    [exerciseCatalog],
+  );
+  const excludedOptions = useMemo(
+    () =>
+      excludeQuery.trim()
+        ? exerciseCatalog
+            .filter(
+              (exercise) =>
+                exercise.name
+                  .toLocaleLowerCase()
+                  .includes(excludeQuery.trim().toLocaleLowerCase()) &&
+                !excludedExerciseIds.includes(exercise.id),
+            )
+            .slice(0, 5)
+        : [],
+    [exerciseCatalog, excludeQuery, excludedExerciseIds],
+  );
 
   const filteredExercises = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -297,7 +357,11 @@ export default function CreateWorkoutScreen() {
         ]
           .join(" ")
           .toLowerCase();
-        return matchesMuscle && matchesPreset && (!normalizedQuery || searchable.includes(normalizedQuery));
+        return (
+          matchesMuscle &&
+          matchesPreset &&
+          (!normalizedQuery || searchable.includes(normalizedQuery))
+        );
       })
       .sort((a, b) => b.scienceScore - a.scienceScore || a.name.localeCompare(b.name))
       .slice(0, 24);
@@ -312,7 +376,11 @@ export default function CreateWorkoutScreen() {
       for (let i = 0; i < value; i += 1) {
         next.push(
           current[i]
-            ? { ...current[i]!, dayIndex: i, name: current[i]!.name || templates[i] || `Dia ${i + 1}` }
+            ? {
+                ...current[i]!,
+                dayIndex: i,
+                name: current[i]!.name || templates[i] || `Dia ${i + 1}`,
+              }
             : { dayIndex: i, name: templates[i] ?? `Dia ${i + 1}`, exercises: [] },
         );
       }
@@ -388,9 +456,16 @@ export default function CreateWorkoutScreen() {
   }
 
   function applyEvidenceTemplate(targetStep: WizardStep = 3) {
-    const suggestedDays = buildSuggestedWorkoutDays(exerciseCatalog, frequency, goal, experienceLevel);
+    const suggestedDays = buildSuggestedWorkoutDays(
+      exerciseCatalog,
+      frequency,
+      goal,
+      experienceLevel,
+    );
     setDays(suggestedDays);
     setSelectedDayIndex(0);
+    setAiResponse(null);
+    setError(null);
     if (!name.trim()) setName(`${goalLabel} ${frequency} dias ${experienceLabel(experienceLevel)}`);
     if (!description.trim()) {
       setDescription(
@@ -409,23 +484,30 @@ export default function CreateWorkoutScreen() {
 
   async function generateCompleteWorkoutWithAi() {
     if (loadingExercises || exerciseCatalog.length === 0) {
-      setAiResponse("Estoy cargando el catalogo de ejercicios. Intenta nuevamente en unos segundos.");
+      setError(
+        "El catálogo de ejercicios todavía no está disponible. Intenta nuevamente en unos segundos.",
+      );
       return;
     }
     if (!profileId) return;
+    const minutes = sessionMinutes.trim() ? Number(sessionMinutes) : undefined;
+    if (minutes !== undefined && (!Number.isInteger(minutes) || minutes < 10 || minutes > 180)) {
+      setError("Indica entre 10 y 180 minutos por sesión.");
+      return;
+    }
+    if (exerciseCatalog.length > 200) {
+      setError("El catálogo supera el límite del generador. Puedes crear tu rutina manualmente.");
+      return;
+    }
 
     setAiLoading(true);
     setAiResponse(null);
     setError(null);
 
-    const applyFallback = () => {
-      setDays(buildSuggestedWorkoutDays(exerciseCatalog, frequency, goal, experienceLevel));
-    };
-
     try {
       // La IA arma la rutina de verdad a partir del objetivo, nivel y el texto
       // libre del usuario, eligiendo solo ejercicios de este catalogo.
-      const catalog = exerciseCatalog.slice(0, 140).map((exercise) => ({
+      const catalog = exerciseCatalog.map((exercise) => ({
         id: exercise.id,
         name: exercise.name,
         muscles: (exercise.muscleGroupIds ?? []).map(muscleLabel),
@@ -438,49 +520,41 @@ export default function CreateWorkoutScreen() {
         experienceLevel: experienceLabel(experienceLevel),
         durationLabel,
         instructions: aiInstructions.trim() || null,
+        ...(allowedEquipment.length ? { allowedEquipment } : {}),
+        excludedExerciseIds,
+        ...(minutes !== undefined ? { sessionMinutes: minutes } : {}),
         catalog,
       });
 
       const detail = { workoutDays: result.workoutDays } as unknown as WorkoutEditorDetail;
-      const aiDays = buildDraftDaysFromWorkout(detail, exerciseCatalog, goal, experienceLevel)
-        .filter((day) => day.exercises.length > 0)
-        .map((day, index) => ({ ...day, dayIndex: index }));
-
-      if (aiDays.length === 0) {
-        applyFallback();
-        setAiResponse(
-          "La IA no pudo armar la rutina esta vez; use el generador por evidencia como respaldo. Revisala y ajustala.",
-        );
-      } else {
-        setDays(aiDays);
-        setAiResponse(result.summary);
+      const aiDays = buildDraftDaysFromWorkout(detail, exerciseCatalog, goal, experienceLevel);
+      if (aiDays.length !== frequency || aiDays.some((day) => day.exercises.length === 0)) {
+        throw new Error(`La respuesta no contiene los ${frequency} días completos que pediste.`);
       }
-    } catch (caught) {
-      applyFallback();
-      setAiResponse(
-        caught instanceof Error
-          ? `No pude generar con IA (${caught.message}). Use el generador por evidencia como respaldo.`
-          : "No pude generar con IA. Use el generador por evidencia como respaldo.",
-      );
-    } finally {
-      if (!name.trim()) setName(`${goalLabel} ${frequency} dias ${experienceLabel(experienceLevel)}`);
+      setDays(aiDays);
+      setAiResponse(result.summary);
+      if (!name.trim())
+        setName(`${goalLabel} ${frequency} dias ${experienceLabel(experienceLevel)}`);
       if (!description.trim()) {
-        setDescription(
-          aiInstructions.trim()
-            ? `Rutina personalizada por IA. Contexto: ${aiInstructions.trim()}`
-            : "Rutina personalizada por IA segun tu objetivo y nivel.",
-        );
+        setDescription(result.summary);
       }
       setSelectedDayIndex(0);
-      setAiLoading(false);
       setStep(4);
+    } catch (caught) {
+      setError(
+        `${caught instanceof Error ? caught.message : "No pudimos generar la rutina."} Tu borrador se conserva. Puedes reintentar o continuar con la edición manual.`,
+      );
+    } finally {
+      setAiLoading(false);
     }
   }
 
   function canAdvanceFromStep(currentStep: number): boolean {
     if (currentStep === 1) return name.trim().length > 0;
-    if (currentStep === 2) return days.length === frequency && days.every((day) => day.name.trim().length > 0);
-    if (currentStep === 3) return days.some((day) => day.exercises.length > 0);
+    if (currentStep === 2)
+      return days.length === frequency && days.every((day) => day.name.trim().length > 0);
+    if (currentStep === 3)
+      return days.length === frequency && days.every((day) => day.exercises.length > 0);
     return true;
   }
 
@@ -496,7 +570,9 @@ export default function CreateWorkoutScreen() {
           : [
               description.trim(),
               `Nivel declarado: ${experienceLabel(experienceLevel)}`,
-              aiInstructions.trim() ? `Instrucciones personales para IA:\n${aiInstructions.trim()}` : "",
+              aiInstructions.trim()
+                ? `Instrucciones personales para IA:\n${aiInstructions.trim()}`
+                : "",
               `Duracion: ${durationLabel}`,
             ]
               .filter(Boolean)
@@ -544,10 +620,15 @@ export default function CreateWorkoutScreen() {
           : "Construye una rutina con ejercicios priorizados por efectividad, seguridad y facilidad de progresion."}
       </Subtitle>
       <StepIndicator step={step} />
+      {error ? (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {error}
+        </Text>
+      ) : null}
       {loadingWorkout ? <LoadingState label="Cargando rutina..." /> : null}
 
       {step === 1 ? (
-        <View style={styles.stack}>
+        <View style={styles.stack} pointerEvents={aiLoading ? "none" : "auto"}>
           <Card>
             <Text style={styles.sectionTitle}>1. Nombre y objetivo</Text>
             <Text style={styles.label}>Nombre</Text>
@@ -577,8 +658,93 @@ export default function CreateWorkoutScreen() {
               multiline
             />
             <Text style={styles.aiInstructionsHint}>
-              Esto se guarda con la rutina y se usa como contexto cuando pides sugerencias. Si hay dolor o lesion,
-              la IA debe responder con cautela y recomendar apoyo profesional.
+              Esto se guarda con la rutina y se usa como contexto cuando pides sugerencias. Si hay
+              dolor o lesion, la IA debe responder con cautela y recomendar apoyo profesional.
+            </Text>
+            <Text style={styles.label}>Equipo disponible para la IA</Text>
+            <Text style={styles.aiInstructionsHint}>
+              Sin selección: todo el catálogo. Si eliges equipo, la IA solo podrá usar ejercicios
+              compatibles.
+            </Text>
+            <View style={styles.chipsRow}>
+              {equipmentOptions.map((equipment) => (
+                <Pressable
+                  key={equipment}
+                  disabled={aiLoading}
+                  onPress={() =>
+                    setAllowedEquipment((current) =>
+                      current.includes(equipment)
+                        ? current.filter((value) => value !== equipment)
+                        : [...current, equipment],
+                    )
+                  }
+                  style={[
+                    styles.chip,
+                    allowedEquipment.includes(equipment) ? styles.chipActive : null,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      allowedEquipment.includes(equipment) ? styles.chipTextActive : null,
+                    ]}
+                  >
+                    {equipment}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={styles.label}>Ejercicios que la IA debe evitar</Text>
+            <View style={styles.chipsRow}>
+              {excludedExerciseIds.map((id) => (
+                <Pressable
+                  key={id}
+                  disabled={aiLoading}
+                  onPress={() =>
+                    setExcludedExerciseIds((current) => current.filter((value) => value !== id))
+                  }
+                  style={styles.chip}
+                >
+                  <Text style={styles.chipText}>
+                    {exerciseCatalog.find((exercise) => exercise.id === id)?.name ?? "Ejercicio"} ×
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <TextInput
+              value={excludeQuery}
+              onChangeText={setExcludeQuery}
+              editable={!aiLoading}
+              placeholder="Busca un ejercicio para excluirlo"
+              placeholderTextColor={colors.muted}
+              style={styles.input}
+            />
+            {excludedOptions.map((exercise) => (
+              <Pressable
+                key={exercise.id}
+                disabled={aiLoading}
+                onPress={() => {
+                  setExcludedExerciseIds((current) => [...current, exercise.id]);
+                  setExcludeQuery("");
+                }}
+                style={styles.durationRow}
+              >
+                <Text style={styles.chipText}>Excluir {exercise.name}</Text>
+                <Plus size={16} color={colors.muted} />
+              </Pressable>
+            ))}
+            <Text style={styles.label}>Minutos por sesión (opcional)</Text>
+            <TextInput
+              value={sessionMinutes}
+              onChangeText={setSessionMinutes}
+              editable={!aiLoading}
+              keyboardType="number-pad"
+              placeholder="Ej. 60"
+              placeholderTextColor={colors.muted}
+              style={styles.input}
+            />
+            <Text style={styles.aiInstructionsHint}>
+              La IA estima el tiempo incluyendo calentamiento y descansos. Revísalo en el borrador.
             </Text>
             <Text style={styles.label}>Objetivo</Text>
             <View style={styles.optionGrid}>
@@ -588,7 +754,12 @@ export default function CreateWorkoutScreen() {
                   onPress={() => setGoal(option.value)}
                   style={[styles.optionCard, goal === option.value ? styles.optionActive : null]}
                 >
-                  <Text style={[styles.optionTitle, goal === option.value ? styles.optionTitleActive : null]}>
+                  <Text
+                    style={[
+                      styles.optionTitle,
+                      goal === option.value ? styles.optionTitleActive : null,
+                    ]}
+                  >
                     {option.label}
                   </Text>
                   <Text style={styles.optionHelper}>{option.helper}</Text>
@@ -603,7 +774,12 @@ export default function CreateWorkoutScreen() {
                   onPress={() => setDuration(option.value)}
                   style={[styles.chip, duration === option.value ? styles.chipActive : null]}
                 >
-                  <Text style={[styles.chipText, duration === option.value ? styles.chipTextActive : null]}>
+                  <Text
+                    style={[
+                      styles.chipText,
+                      duration === option.value ? styles.chipTextActive : null,
+                    ]}
+                  >
                     {option.label}
                   </Text>
                 </Pressable>
@@ -615,9 +791,17 @@ export default function CreateWorkoutScreen() {
                 <Pressable
                   key={option.value}
                   onPress={() => setExperienceLevel(option.value)}
-                  style={[styles.optionCard, experienceLevel === option.value ? styles.optionActive : null]}
+                  style={[
+                    styles.optionCard,
+                    experienceLevel === option.value ? styles.optionActive : null,
+                  ]}
                 >
-                  <Text style={[styles.optionTitle, experienceLevel === option.value ? styles.optionTitleActive : null]}>
+                  <Text
+                    style={[
+                      styles.optionTitle,
+                      experienceLevel === option.value ? styles.optionTitleActive : null,
+                    ]}
+                  >
                     {option.label}
                   </Text>
                   <Text style={styles.optionHelper}>{option.helper}</Text>
@@ -625,7 +809,8 @@ export default function CreateWorkoutScreen() {
               ))}
             </View>
             <Text style={styles.aiInstructionsHint}>
-              Si estas recien iniciando, la app baja volumen e intensidad para una fase de adaptacion antes de progresar.
+              Si estas recien iniciando, la app baja volumen e intensidad para una fase de
+              adaptacion antes de progresar.
             </Text>
             <Text style={styles.label}>Dias por semana</Text>
             <View style={styles.chipsRow}>
@@ -635,7 +820,9 @@ export default function CreateWorkoutScreen() {
                   onPress={() => applyFrequency(value)}
                   style={[styles.chip, frequency === value ? styles.chipActive : null]}
                 >
-                  <Text style={[styles.chipText, frequency === value ? styles.chipTextActive : null]}>
+                  <Text
+                    style={[styles.chipText, frequency === value ? styles.chipTextActive : null]}
+                  >
                     {value} dias
                   </Text>
                 </Pressable>
@@ -649,8 +836,8 @@ export default function CreateWorkoutScreen() {
               onPress={generateCompleteWorkoutWithAi}
             />
             <Text style={styles.aiInstructionsHint}>
-              La IA usa tu objetivo, nivel y notas personales para armar un borrador que puedes revisar y editar
-              antes de guardar. Si prefieres armarla tu, sigue con los pasos.
+              La IA usa tu objetivo, nivel y notas personales para armar un borrador que puedes
+              revisar y editar antes de guardar. Si prefieres armarla tu, sigue con los pasos.
             </Text>
           </Card>
         </View>
@@ -674,11 +861,15 @@ export default function CreateWorkoutScreen() {
             ))}
           </View>
           <AppButton
-            label="Generar rutina completa sugerida"
+            label="Usar plantilla básica sin IA"
             icon={Sparkles}
             variant="secondary"
             onPress={() => applyEvidenceTemplate()}
           />
+          <Text style={styles.aiInstructionsHint}>
+            Plantilla general: debes adaptar manualmente el equipo, las exclusiones y tus
+            instrucciones personales.
+          </Text>
           <Text style={styles.label}>Nombres de los dias</Text>
           {days.map((day, index) => (
             <View key={day.dayIndex} style={styles.dayNameRow}>
@@ -746,8 +937,8 @@ export default function CreateWorkoutScreen() {
           <Card>
             <Text style={styles.sectionTitle}>Biblioteca de ejercicios</Text>
             <BodyText style={styles.muted}>
-              Ordenada por prioridad practica: compuestos progresables primero, accesorios despues, ejercicios
-              situacionales al final.
+              Ordenada por prioridad practica: compuestos progresables primero, accesorios despues,
+              ejercicios situacionales al final.
             </BodyText>
             <View style={styles.chipsRow}>
               {bodyPresetLabels.map((preset) => (
@@ -759,7 +950,12 @@ export default function CreateWorkoutScreen() {
                   }}
                   style={[styles.chip, bodyPreset === preset.value ? styles.chipActive : null]}
                 >
-                  <Text style={[styles.chipText, bodyPreset === preset.value ? styles.chipTextActive : null]}>
+                  <Text
+                    style={[
+                      styles.chipText,
+                      bodyPreset === preset.value ? styles.chipTextActive : null,
+                    ]}
+                  >
                     {preset.label}
                   </Text>
                 </Pressable>
@@ -816,7 +1012,8 @@ export default function CreateWorkoutScreen() {
               ) : (
                 day.exercises.map((entry) => (
                   <BodyText key={`${entry.exerciseId}-${entry.orderIndex}`}>
-                    {entry.exerciseName}: {entry.targetSets || "?"} series x {entry.targetReps || "?"} reps
+                    {entry.exerciseName}: {entry.targetSets || "?"} series x{" "}
+                    {entry.targetReps || "?"} reps
                     {entry.restSeconds ? ` - descanso ${entry.restSeconds}s` : ""}
                     {entry.targetWeight ? ` - ${entry.targetWeight} kg` : ""}
                   </BodyText>
@@ -824,7 +1021,10 @@ export default function CreateWorkoutScreen() {
               )}
             </View>
           ))}
-          <Pressable onPress={() => setActivateOnSave((current) => !current)} style={styles.activeToggle}>
+          <Pressable
+            onPress={() => setActivateOnSave((current) => !current)}
+            style={styles.activeToggle}
+          >
             <View style={[styles.checkbox, activateOnSave ? styles.checkboxOn : null]}>
               {activateOnSave ? <Check size={14} color={colors.onPrimary} /> : null}
             </View>
@@ -849,8 +1049,10 @@ export default function CreateWorkoutScreen() {
 
       <View style={styles.navRow}>
         <Pressable
-          disabled={step === 1}
-          onPress={() => setStep((current) => (current > 1 ? ((current - 1) as WizardStep) : current))}
+          disabled={step === 1 || aiLoading || saving}
+          onPress={() =>
+            setStep((current) => (current > 1 ? ((current - 1) as WizardStep) : current))
+          }
           style={[styles.navButton, step === 1 ? styles.navDisabled : null]}
         >
           <ArrowLeft size={18} color={step === 1 ? colors.muted : colors.text} />
@@ -858,9 +1060,13 @@ export default function CreateWorkoutScreen() {
         </Pressable>
         {step < 4 ? (
           <Pressable
-            disabled={!canAdvanceFromStep(step)}
-            onPress={() => setStep((current) => ((current + 1) as WizardStep))}
-            style={[styles.navButton, styles.navPrimary, !canAdvanceFromStep(step) ? styles.navDisabled : null]}
+            disabled={!canAdvanceFromStep(step) || aiLoading || saving}
+            onPress={() => setStep((current) => (current + 1) as WizardStep)}
+            style={[
+              styles.navButton,
+              styles.navPrimary,
+              !canAdvanceFromStep(step) ? styles.navDisabled : null,
+            ]}
           >
             <Text style={[styles.navText, styles.navTextPrimary]}>Siguiente</Text>
             <ArrowRight size={18} color={colors.onPrimary} />
@@ -888,7 +1094,9 @@ function SelectedDayCard({
     <Card>
       <Text style={styles.dayHeader}>{day.name}</Text>
       {day.exercises.length === 0 ? (
-        <BodyText style={styles.muted}>Selecciona un musculo o busca un ejercicio para agregarlo.</BodyText>
+        <BodyText style={styles.muted}>
+          Selecciona un musculo o busca un ejercicio para agregarlo.
+        </BodyText>
       ) : null}
       {day.exercises.map((entry, index) => (
         <View key={`${entry.exerciseId}-${index}`} style={styles.exerciseBox}>
@@ -912,10 +1120,29 @@ function SelectedDayCard({
             </View>
           </View>
           <View style={styles.exerciseInputs}>
-            <EditCell label="Series" value={entry.targetSets} numeric onChange={(value) => onUpdate(index, { targetSets: value })} />
-            <EditCell label="Reps" value={entry.targetReps} onChange={(value) => onUpdate(index, { targetReps: value })} />
-            <EditCell label="Descanso" value={entry.restSeconds} numeric onChange={(value) => onUpdate(index, { restSeconds: value })} />
-            <EditCell label="Peso kg" value={entry.targetWeight} numeric onChange={(value) => onUpdate(index, { targetWeight: value })} />
+            <EditCell
+              label="Series"
+              value={entry.targetSets}
+              numeric
+              onChange={(value) => onUpdate(index, { targetSets: value })}
+            />
+            <EditCell
+              label="Reps"
+              value={entry.targetReps}
+              onChange={(value) => onUpdate(index, { targetReps: value })}
+            />
+            <EditCell
+              label="Descanso"
+              value={entry.restSeconds}
+              numeric
+              onChange={(value) => onUpdate(index, { restSeconds: value })}
+            />
+            <EditCell
+              label="Peso kg"
+              value={entry.targetWeight}
+              numeric
+              onChange={(value) => onUpdate(index, { targetWeight: value })}
+            />
           </View>
           <TextInput
             value={entry.notes}
@@ -968,7 +1195,11 @@ function ExerciseSuggestionCard({
         onPress={onAdd}
         style={[styles.addButton, disabled ? styles.addButtonDisabled : null]}
       >
-        {disabled ? <Check size={15} color={colors.muted} /> : <Plus size={15} color={colors.onPrimary} />}
+        {disabled ? (
+          <Check size={15} color={colors.muted} />
+        ) : (
+          <Plus size={15} color={colors.onPrimary} />
+        )}
         <Text style={[styles.addButtonText, disabled ? styles.addButtonTextDisabled : null]}>
           {disabled ? "Ya agregado" : "Agregar al dia"}
         </Text>
@@ -1015,8 +1246,16 @@ function StepIndicator({ step }: { step: number }) {
         const done = index + 1 < step;
         return (
           <View key={label} style={styles.stepItem}>
-            <View style={[styles.stepDot, active ? styles.stepDotActive : null, done ? styles.stepDotDone : null]}>
-              <Text style={[styles.stepDotText, active || done ? styles.stepDotTextActive : null]}>{index + 1}</Text>
+            <View
+              style={[
+                styles.stepDot,
+                active ? styles.stepDotActive : null,
+                done ? styles.stepDotDone : null,
+              ]}
+            >
+              <Text style={[styles.stepDotText, active || done ? styles.stepDotTextActive : null]}>
+                {index + 1}
+              </Text>
             </View>
             <Text style={[styles.stepLabel, active ? styles.stepLabelActive : null]}>{label}</Text>
           </View>
@@ -1129,7 +1368,9 @@ function pickExercisesForFocus(
 
   for (const exercise of candidates) {
     const key = exercise.normalizedName;
-    const patternAlreadyUsed = selected.some((item) => item.movementPattern === exercise.movementPattern);
+    const patternAlreadyUsed = selected.some(
+      (item) => item.movementPattern === exercise.movementPattern,
+    );
     if (usedByName.has(key) && selected.length < 3) continue;
     if (patternAlreadyUsed && selected.length < Math.min(3, count)) continue;
     selected.push(exercise);
@@ -1151,8 +1392,18 @@ function createExerciseDraft(
   const adaptiveStart = experienceLevel === "new" || experienceLevel === "returning";
   const advanced = experienceLevel === "advanced";
   const baseSets = strength && exercise.tier === "principal" ? 4 : exercise.defaultSets;
-  const sets = adaptiveStart ? Math.min(3, baseSets) : advanced ? Math.min(5, baseSets + 1) : baseSets;
-  const reps = adaptiveStart ? "10-12" : strength ? "4-6" : endurance ? "12-15" : exercise.defaultReps;
+  const sets = adaptiveStart
+    ? Math.min(3, baseSets)
+    : advanced
+      ? Math.min(5, baseSets + 1)
+      : baseSets;
+  const reps = adaptiveStart
+    ? "10-12"
+    : strength
+      ? "4-6"
+      : endurance
+        ? "12-15"
+        : exercise.defaultReps;
   const rest = adaptiveStart
     ? Math.max(90, exercise.defaultRestSeconds)
     : strength
@@ -1163,7 +1414,10 @@ function createExerciseDraft(
   const safetyNote = adaptiveStart
     ? "Primeras 2 semanas liviano: RPE 6-7, tecnica limpia y 2-3 reps en reserva."
     : "";
-  const situationalNote = exercise.tier === "situacional" ? "Usar solo si no genera molestias y la tecnica es solida." : "";
+  const situationalNote =
+    exercise.tier === "situacional"
+      ? "Usar solo si no genera molestias y la tecnica es solida."
+      : "";
 
   return {
     exerciseId: exercise.id,
@@ -1187,8 +1441,9 @@ function experienceLabel(level: ExperienceLevel): string {
 function goalValueFromLabel(value?: string | null): GoalValue {
   const normalized = value?.trim().toLowerCase();
   return (
-    goalOptions.find((option) => option.value === normalized || option.label.toLowerCase() === normalized)
-      ?.value ?? "otro"
+    goalOptions.find(
+      (option) => option.value === normalized || option.label.toLowerCase() === normalized,
+    )?.value ?? "otro"
   );
 }
 
@@ -1196,7 +1451,10 @@ function muscleLabel(id: MuscleGroupId): string {
   return MUSCLE_GROUPS.find((muscle) => muscle.id === id)?.label ?? id;
 }
 
-function exerciseMatchesMuscle(exercise: ExerciseCatalogItem, selected: MuscleGroupId | "all"): boolean {
+function exerciseMatchesMuscle(
+  exercise: ExerciseCatalogItem,
+  selected: MuscleGroupId | "all",
+): boolean {
   if (selected === "all") return true;
   if (exercise.muscleGroupIds.includes(selected)) return true;
   const aliases: Partial<Record<MuscleGroupId, MuscleGroupId[]>> = {
@@ -1330,7 +1588,12 @@ function makeStyles(colors: ColorPalette) {
       borderColor: colors.border,
       backgroundColor: colors.backgroundElevated,
     },
-    exerciseHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+    exerciseHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+    },
     exerciseTitleCol: { flex: 1, gap: 2 },
     exerciseName: { color: colors.text, fontWeight: "900", fontSize: 15 },
     exerciseMeta: { color: colors.muted, fontSize: 12, lineHeight: 16 },

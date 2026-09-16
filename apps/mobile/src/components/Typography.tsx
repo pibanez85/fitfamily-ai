@@ -38,10 +38,10 @@ function makeStyles(colors: ColorPalette) {
   return StyleSheet.create({
     title: {
       color: colors.text,
-      fontSize: 28,
+      fontSize: 32,
       fontWeight: "800",
-      lineHeight: 34,
-      letterSpacing: -0.6,
+      lineHeight: 39,
+      letterSpacing: -1.2,
     },
     subtitle: {
       color: colors.muted,
