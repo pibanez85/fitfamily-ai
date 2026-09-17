@@ -6,10 +6,10 @@ import { LinearGradient } from "expo-linear-gradient";
 
 // Cada miembro de la familia recibe un degradado propio para su avatar.
 const avatarGradients: Array<[string, string]> = [
-  ["#34d399", "#22d3ee"],
-  ["#f59e0b", "#fb7185"],
-  ["#8b5cf6", "#6366f1"],
-  ["#f43f5e", "#fb923c"],
+  ["#C4F171", "#65A30D"],
+  ["#FFB27A", "#FF8A3D"],
+  ["#A78BFA", "#7C6CF6"],
+  ["#FF9BB8", "#FF5C6E"],
 ];
 import { AppButton } from "@/components/AppButton";
 import { Card } from "@/components/Card";

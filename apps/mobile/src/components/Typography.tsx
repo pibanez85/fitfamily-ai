@@ -38,16 +38,17 @@ function makeStyles(colors: ColorPalette) {
   return StyleSheet.create({
     title: {
       color: colors.text,
-      fontSize: 32,
-      fontWeight: "800",
-      lineHeight: 39,
-      letterSpacing: -1.2,
+      fontSize: 30,
+      fontWeight: "900",
+      lineHeight: 36,
+      letterSpacing: -1.3,
     },
     subtitle: {
       color: colors.muted,
       fontSize: 14.5,
       lineHeight: 21,
       letterSpacing: -0.1,
+      fontWeight: "500",
     },
     body: {
       color: colors.text,

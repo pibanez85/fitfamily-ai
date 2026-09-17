@@ -1,8 +1,9 @@
 // Paletas de color para tema claro y oscuro.
 // Ambas exponen EXACTAMENTE las mismas claves para poder intercambiarlas.
 //
-// Identidad visual: "aurora" — fondo azul-noche profundo con un resplandor
-// menta/cian sutil, superficies translucidas tipo vidrio y acentos calidos.
+// Identidad visual: "lime premium" — base clara y limpia con tarjetas
+// blancas de alto contraste, tipografia grande y un acento lima/oliva
+// en degradado como color de marca (CTAs, anillos, estado activo).
 
 export type ColorPalette = {
   background: string;
@@ -39,63 +40,63 @@ export type ColorPalette = {
 };
 
 export const darkColors: ColorPalette = {
-  background: "#070b14",
-  backgroundElevated: "#0c1322",
-  surface: "rgba(22, 32, 50, 0.82)",
-  surfaceMuted: "rgba(34, 47, 70, 0.55)",
-  surfaceStrong: "#25334e",
-  text: "#f6f8fc",
-  muted: "#9cabc2",
-  subtle: "#64748b",
-  border: "rgba(148, 163, 184, 0.16)",
-  primary: "#3ee6c4",
-  primaryDark: "#0f9e85",
-  primarySoft: "rgba(62, 230, 196, 0.12)",
-  accent: "#fb7185",
-  accentSoft: "rgba(251, 113, 133, 0.14)",
-  energy: "#fbbf24",
-  energySoft: "rgba(251, 191, 36, 0.14)",
-  warning: "#f59e0b",
-  danger: "#fb7185",
-  success: "#34d399",
+  background: "#0D0F13",
+  backgroundElevated: "#171A21",
+  surface: "rgba(255, 255, 255, 0.06)",
+  surfaceMuted: "rgba(255, 255, 255, 0.04)",
+  surfaceStrong: "#20242D",
+  text: "#F6F8FC",
+  muted: "#9CA3AF",
+  subtle: "#6B7280",
+  border: "rgba(255, 255, 255, 0.09)",
+  primary: "#A3E635",
+  primaryDark: "#65A30D",
+  primarySoft: "rgba(163, 230, 53, 0.14)",
+  accent: "#FF8A3D",
+  accentSoft: "rgba(255, 138, 61, 0.14)",
+  energy: "#7C6CF6",
+  energySoft: "rgba(124, 108, 246, 0.16)",
+  warning: "#FF8A3D",
+  danger: "#FF5C6E",
+  success: "#A3E635",
   shadow: "#000000",
   overlay: "rgba(4, 8, 16, 0.6)",
-  onPrimary: "#04120e",
-  gradientFrom: "#34d399",
-  gradientTo: "#22d3ee",
-  backgroundGlow: "rgba(45, 212, 191, 0.07)",
-  glass: "rgba(12, 19, 34, 0.72)",
-  glassBorder: "rgba(148, 163, 184, 0.14)",
+  onPrimary: "#1A2B05",
+  gradientFrom: "#C4F171",
+  gradientTo: "#65A30D",
+  backgroundGlow: "rgba(163, 230, 53, 0.06)",
+  glass: "rgba(23, 26, 33, 0.78)",
+  glassBorder: "rgba(255, 255, 255, 0.10)",
 };
 
 export const lightColors: ColorPalette = {
-  background: "#F6F7F2",
+  background: "#F1F3EC",
   backgroundElevated: "#ffffff",
   surface: "#FFFFFF",
-  surfaceMuted: "#EEF1E8",
-  surfaceStrong: "#E2E8D9",
-  text: "#182820",
-  muted: "#69756B",
-  subtle: "#7D897D",
-  border: "#E4E8DD",
-  primary: "#426B50",
-  primaryDark: "#243F30",
-  primarySoft: "#E9F1DF",
-  accent: "#BD714C",
-  accentSoft: "#F9EEE5",
-  energy: "#b45309",
-  energySoft: "rgba(180, 83, 9, 0.12)",
-  warning: "#b45309",
-  danger: "#dc2626",
-  success: "#0e9f6e",
-  shadow: "#0f172a",
+  surfaceMuted: "#F1F3EC",
+  surfaceStrong: "#E7EBDC",
+  text: "#12151A",
+  muted: "#70757E",
+  subtle: "#A4A9B2",
+  border: "#ECEDF0",
+  primary: "#65A30D",
+  primaryDark: "#3F6212",
+  primarySoft: "#EEFAD1",
+  accent: "#FF8A3D",
+  accentSoft: "#FFF1E6",
+  energy: "#7C6CF6",
+  energySoft: "#F1EFFF",
+  warning: "#FF8A3D",
+  danger: "#FF5C6E",
+  success: "#3F6212",
+  shadow: "#0F172A",
   overlay: "rgba(15, 23, 42, 0.45)",
-  onPrimary: "#ffffff",
-  gradientFrom: "#426B50",
-  gradientTo: "#426B50",
+  onPrimary: "#1A2B05",
+  gradientFrom: "#C4F171",
+  gradientTo: "#65A30D",
   backgroundGlow: "transparent",
   glass: "rgba(255, 255, 255, 0.78)",
-  glassBorder: "rgba(15, 33, 63, 0.08)",
+  glassBorder: "rgba(15, 33, 63, 0.06)",
 };
 
 // Compatibilidad: los modulos que aun no migraron a useTheme siguen importando
@@ -103,9 +104,9 @@ export const lightColors: ColorPalette = {
 export const colors: ColorPalette = lightColors;
 
 export const radius = {
-  sm: 12,
-  md: 18,
-  lg: 26,
+  sm: 14,
+  md: 22,
+  lg: 28,
   pill: 999,
 };
 

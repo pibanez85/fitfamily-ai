@@ -25,10 +25,10 @@ function makeStyles(colors: ColorPalette) {
       borderRadius: radius.md,
       backgroundColor: colors.surface,
       shadowColor: colors.shadow,
-      shadowOpacity: 0.025,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 1,
+      shadowOpacity: 0.07,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 10 },
+      elevation: 4,
     },
   });
 }

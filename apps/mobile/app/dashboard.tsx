@@ -234,10 +234,10 @@ function ProfileDashboard() {
                     name: "Proteína",
                     value: total.protein,
                     goal: goals.proteinG,
-                    color: "#426B50",
+                    color: "#65A30D",
                   },
-                  { name: "Carbos", value: total.carbs, goal: goals.carbsG, color: "#C7A260" },
-                  { name: "Grasas", value: total.fat, goal: goals.fatG, color: "#BB866A" },
+                  { name: "Carbos", value: total.carbs, goal: goals.carbsG, color: "#FF8A3D" },
+                  { name: "Grasas", value: total.fat, goal: goals.fatG, color: "#FF5C6E" },
                 ].map((macro) => (
                   <View key={macro.name} style={{ flex: 1, gap: 7 }}>
                     <Text style={[s.small, { color: colors.muted }]}>{macro.name}</Text>

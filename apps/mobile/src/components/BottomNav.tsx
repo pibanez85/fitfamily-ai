@@ -38,7 +38,16 @@ export function BottomNav({ vertical = false }: { vertical?: boolean }) {
     <View
       style={[
         styles.nav,
-        { backgroundColor: colors.surface, borderColor: colors.border },
+        vertical
+          ? { backgroundColor: colors.surface, borderColor: colors.border }
+          : {
+              backgroundColor: colors.text,
+              shadowColor: colors.shadow,
+              shadowOpacity: 0.22,
+              shadowRadius: 24,
+              shadowOffset: { width: 0, height: 14 },
+              elevation: 10,
+            },
         vertical ? styles.sidebar : styles.bottom,
       ]}
     >
@@ -65,24 +74,32 @@ export function BottomNav({ vertical = false }: { vertical?: boolean }) {
             style={({ pressed }) => [
               styles.item,
               vertical ? styles.sideItem : styles.bottomItem,
-              {
-                backgroundColor: active ? colors.primarySoft : "transparent",
-                opacity: pressed ? 0.7 : 1,
-              },
+              vertical
+                ? { backgroundColor: active ? colors.primarySoft : "transparent" }
+                : { backgroundColor: active ? colors.primary : "transparent" },
+              { opacity: pressed ? 0.7 : 1 },
             ]}
           >
             <Icon
-              size={vertical ? 21 : 22}
-              color={active ? colors.primary : colors.muted}
-              strokeWidth={active ? 2.2 : 1.7}
+              size={vertical ? 21 : 20}
+              color={
+                vertical
+                  ? active
+                    ? colors.primary
+                    : colors.muted
+                  : active
+                    ? colors.onPrimary
+                    : "#9CA3AF"
+              }
+              strokeWidth={active ? 2.3 : 1.8}
             />
             <Text
               style={[
                 vertical ? styles.sideLabel : styles.label,
-                {
-                  color: active ? colors.primary : colors.muted,
-                  fontWeight: active ? "700" : "500",
-                },
+                vertical
+                  ? { color: active ? colors.primary : colors.muted }
+                  : { color: active ? colors.onPrimary : "#9CA3AF" },
+                { fontWeight: active ? "800" : "600" },
               ]}
             >
               {label}
@@ -137,12 +154,18 @@ export function BottomNav({ vertical = false }: { vertical?: boolean }) {
 }
 const styles = StyleSheet.create({
   nav: { gap: 6 },
-  bottom: { flexDirection: "row", padding: 8, borderTopWidth: 1 },
+  bottom: {
+    flexDirection: "row",
+    padding: 8,
+    borderRadius: 28,
+    marginHorizontal: 14,
+    marginBottom: 10,
+  },
   sidebar: { width: 226, padding: 20, borderRightWidth: 1 },
   brand: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 19 },
   brandText: { fontSize: 26, fontWeight: "800", letterSpacing: -1.2 },
   caption: { fontSize: 9, letterSpacing: 1.4, marginTop: 32, marginBottom: 16, fontWeight: "700" },
-  item: { borderRadius: 12 },
+  item: { borderRadius: 18 },
   bottomItem: { flex: 1, alignItems: "center", justifyContent: "center", minHeight: 53, gap: 5 },
   sideItem: {
     flexDirection: "row",

@@ -12,9 +12,9 @@ type MacroDonutProps = {
 };
 
 const macroColors = {
-  protein: "#3ee6c4",
-  carbs: "#fbbf24",
-  fat: "#fb7185",
+  protein: "#65A30D",
+  carbs: "#FF8A3D",
+  fat: "#FF5C6E",
 };
 
 export function MacroDonut({ totals, size = 152 }: MacroDonutProps) {

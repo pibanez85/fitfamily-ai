@@ -89,40 +89,45 @@ export function AppButton({
 function makeStyles(colors: ColorPalette) {
   return StyleSheet.create({
     base: {
-      minHeight: 50,
-      borderRadius: radius.sm + 2,
+      minHeight: 54,
+      borderRadius: radius.md,
       overflow: "hidden",
       justifyContent: "center",
     },
     row: {
-      minHeight: 50,
+      minHeight: 54,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
       gap: 8,
-      paddingHorizontal: 16,
+      paddingHorizontal: 18,
       paddingVertical: 12,
     },
     gradientFill: {
-      minHeight: 50,
+      minHeight: 54,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
       gap: 8,
-      paddingHorizontal: 16,
+      paddingHorizontal: 18,
       paddingVertical: 12,
     },
     primaryShadow: {
       shadowColor: colors.primary,
-      shadowOpacity: 0,
-      shadowRadius: 0,
-      shadowOffset: { width: 0, height: 6 },
-      elevation: 0,
+      shadowOpacity: 0.45,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 6,
     },
     secondary: {
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
+      shadowColor: colors.shadow,
+      shadowOpacity: 0.05,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 2,
     },
     danger: {
       backgroundColor: colors.danger,
@@ -138,9 +143,9 @@ function makeStyles(colors: ColorPalette) {
       opacity: 0.55,
     },
     label: {
-      fontSize: 15,
+      fontSize: 15.5,
       fontWeight: "800",
-      letterSpacing: 0.1,
+      letterSpacing: -0.1,
     },
   });
 }
